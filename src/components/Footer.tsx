@@ -191,7 +191,8 @@ export default function Footer() {
           .footer-grid { grid-template-columns: 1fr 1fr !important; gap: 32px !important; }
         }
         @media (max-width: 600px) {
-          .footer-grid { grid-template-columns: 1fr !important; }
+          .footer-grid { grid-template-columns: 1fr !important; gap: 24px !important; }
+          footer { padding: 40px 16px 30px !important; }
         }
       `}</style>
     </footer>

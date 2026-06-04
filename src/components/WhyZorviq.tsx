@@ -291,6 +291,11 @@ export default function WhyZorviq() {
         @media (max-width: 900px) {
           .bento-card { grid-column: span 12 !important; }
         }
+        @media (max-width: 600px) {
+          #why { padding: 40px 16px 60px !important; }
+          .bento-card > div:first-child { padding: 20px 20px 0 !important; }
+          .bento-card > div:last-child { padding: 20px !important; }
+        }
       `}</style>
     </section>
   );

@@ -237,6 +237,7 @@ export default function Templates() {
         }
         @media (max-width: 560px) {
           .tpl-grid { grid-template-columns: 1fr !important; }
+          #templates { padding: 40px 16px !important; }
         }
         #templates button:hover {
           color: rgba(255,255,255,0.7) !important;

@@ -498,6 +498,7 @@ export default function Navbar() {
                 boxShadow: "0 1px 0 rgba(255,255,255,0.10) inset, 0 0 20px rgba(124,58,237,0.22)",
                 whiteSpace: "nowrap",
               }}
+              className="hidden-mobile"
               onMouseEnter={(e) => {
                 (e.currentTarget as HTMLElement).style.boxShadow =
                   "0 1px 0 rgba(255,255,255,0.12) inset, 0 0 32px rgba(124,58,237,0.40)";

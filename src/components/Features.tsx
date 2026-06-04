@@ -476,24 +476,31 @@ const FEATURES = [
 
 export default function Features() {
   const [active, setActive] = useState(0);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Detect mobile
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 900);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   // Scroll-driven animation (pinned scroll-jacking)
   const sectionRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
+    if (isMobile) return;
     let ticking = false;
     const handleScroll = () => {
       if (!ticking) {
         window.requestAnimationFrame(() => {
           if (sectionRef.current) {
             const rect = sectionRef.current.getBoundingClientRect();
-            // Scroll distance is the section height minus the viewport height
             const scrollDistance = rect.height - window.innerHeight;
             if (scrollDistance > 0) {
-              // Calculate progress from 0 to 1
               let progress = -rect.top / scrollDistance;
               progress = Math.max(0, Math.min(1, progress));
-              
               const index = Math.min(
                 FEATURES.length - 1,
                 Math.floor(progress * FEATURES.length)
@@ -506,13 +513,124 @@ export default function Features() {
         ticking = true;
       }
     };
-    
     window.addEventListener("scroll", handleScroll, { passive: true });
-    handleScroll(); // Initialize
+    handleScroll();
     return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
+  }, [isMobile]);
 
   const feat = FEATURES[active];
+
+  // ── Mobile layout: all features stacked ──
+  if (isMobile) {
+    return (
+      <section
+        id="features"
+        aria-label="Product features"
+        style={{
+          position: "relative",
+          background: "linear-gradient(to bottom, #060606 0%, #060606 85%, #000000 100%)",
+          padding: "60px 20px",
+        }}
+      >
+        {/* Section header */}
+        <div style={{ textAlign: "center", marginBottom: "48px" }}>
+          <span style={{
+            display: "inline-flex", alignItems: "center", gap: "7px",
+            padding: "4px 14px 4px 10px",
+            borderRadius: "9999px",
+            background: "rgba(124,58,237,0.08)",
+            border: "1px solid rgba(124,58,237,0.18)",
+            color: "#C4B5FD",
+            fontSize: "0.635rem",
+            fontWeight: 500,
+            letterSpacing: "0.08em",
+            fontFamily: "'Inter', sans-serif",
+            textTransform: "uppercase" as const,
+            marginBottom: "16px",
+          }}>
+            <span style={{ width: "4px", height: "4px", borderRadius: "50%", background: "#A78BFA", boxShadow: "0 0 8px rgba(167,139,250,0.9)" }} />
+            Built for speed
+          </span>
+          <h2 style={{
+            fontFamily: "'Inter', sans-serif",
+            fontWeight: 900,
+            fontSize: "clamp(1.8rem, 7vw, 2.6rem)",
+            lineHeight: 1.1,
+            letterSpacing: "-0.04em",
+            color: "#f4f4f4",
+            marginBottom: "12px",
+          }}>
+            Every tool you need,{" "}
+            <span style={{
+              background: "linear-gradient(128deg, #EDE9FE 0%, #C4B5FD 25%, #A78BFA 55%, #7C3AED 100%)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              backgroundClip: "text",
+            }}>nothing you don&apos;t.</span>
+          </h2>
+        </div>
+
+        {/* All features stacked */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "32px", maxWidth: "600px", margin: "0 auto" }}>
+          {FEATURES.map((f) => (
+            <div key={f.id} style={{
+              background: "rgba(255,255,255,0.02)",
+              border: "1px solid rgba(255,255,255,0.07)",
+              borderRadius: "20px",
+              overflow: "hidden",
+            }}>
+              {/* Preview */}
+              <div style={{ height: "240px", padding: "16px", position: "relative" }}>
+                <div style={{
+                  position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+                  background: `radial-gradient(circle at center, ${f.accent}15, transparent 60%)`,
+                  pointerEvents: "none",
+                }} />
+                <div style={{ position: "relative", zIndex: 1, width: "100%", height: "100%" }}>
+                  {f.preview}
+                </div>
+              </div>
+              {/* Text */}
+              <div style={{ padding: "20px 24px 24px", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                <span style={{
+                  display: "inline-flex", alignItems: "center", gap: "5px",
+                  padding: "2px 10px", borderRadius: "9999px",
+                  background: "rgba(124,58,237,0.12)",
+                  border: "1px solid rgba(124,58,237,0.25)",
+                  color: "#C4B5FD", fontSize: "0.55rem", fontWeight: 600,
+                  letterSpacing: "0.08em", textTransform: "uppercase" as const,
+                  fontFamily: "'Inter', sans-serif", marginBottom: "12px",
+                }}>
+                  {f.tag}
+                </span>
+                <h3 style={{
+                  fontFamily: "'Inter', sans-serif",
+                  fontWeight: 800,
+                  fontSize: "1.25rem",
+                  lineHeight: 1.2,
+                  letterSpacing: "-0.02em",
+                  color: "#fff",
+                  marginBottom: "10px",
+                }}>
+                  {f.headline}
+                </h3>
+                <p style={{
+                  fontFamily: "'Inter', sans-serif",
+                  fontSize: "0.88rem",
+                  color: "rgba(255,255,255,0.5)",
+                  lineHeight: 1.65,
+                }}>
+                  {f.desc}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  // ── Desktop layout: sticky scroll-jacking ──
 
   return (
     <section

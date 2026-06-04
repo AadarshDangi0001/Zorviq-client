@@ -8,11 +8,11 @@ import "@/i18n";
 
 /* ─── Data ─────────────────────────────────────────── */
 const PROMPTS = [
-  "Create a portfolio for a motion designer",
-  "Coffee shop website with online ordering",
-  "Landing page for an AI productivity tool",
-  "Personal site for a freelance developer",
-  "E-commerce store for handmade ceramics",
+  "Portfolio for a motion designer",
+  "Coffee shop with online ordering",
+  "Landing page for an AI product",
+  "Personal site for a developer",
+  "E-commerce store for ceramics",
 ];
 
 const GEN_STEPS = [
@@ -171,10 +171,9 @@ export default function Hero() {
   }, []);
 
   return (
-    <section style={{
+    <section className="hero-section" style={{
       position: "relative",
-      height: "100vh",
-      minHeight: "600px",
+      minHeight: "100svh",
       display: "flex",
       flexDirection: "column",
       alignItems: "center",
@@ -212,7 +211,7 @@ export default function Hero() {
       }} />
 
       {/* ═══ Main layout ═══ */}
-      <div style={{
+      <div className="hero-layout" style={{
         position: "relative", zIndex: 2,
         width: "100%", maxWidth: "1320px",
         margin: "0 auto", padding: "0 56px",
@@ -223,7 +222,7 @@ export default function Hero() {
       }}>
 
         {/* ── Left column ── */}
-        <div style={{ flex: "1 1 520px", minWidth: 0 }}>
+        <div className="hero-left" style={{ flex: "1 1 520px", minWidth: 0 }}>
 
           {/* Badge */}
           <div style={{
@@ -306,7 +305,7 @@ export default function Hero() {
             animation: "heroIn 1s cubic-bezier(0.16,1,0.3,1) 0.24s both",
           }}>
             {/* Ambient glow behind input */}
-            <div style={{
+            <div className="prompt-glow" style={{
               position: "absolute",
               top: "50%", left: "50%",
               transform: "translate(-50%, -50%)",
@@ -322,6 +321,7 @@ export default function Hero() {
             }} />
 
             <div
+              className="prompt-input-wrapper"
               onMouseEnter={() => setPromptHover(true)}
               onMouseLeave={() => setPromptHover(false)}
               style={{
@@ -342,11 +342,11 @@ export default function Hero() {
                 cursor: "text",
               }}
             >
-              <Sparkles size={14} color={promptHover ? "#A78BFA" : "#6D28D9"} style={{
+              <Sparkles className="prompt-sparkles" size={14} color={promptHover ? "#A78BFA" : "#6D28D9"} style={{
                 flexShrink: 0, opacity: 0.75,
                 transition: "all 0.3s ease",
               }} />
-              <div style={{ flex: 1, position: "relative", display: "flex", alignItems: "center", padding: "0 16px", overflow: "hidden" }}>
+              <div className="prompt-input-container" style={{ flex: 1, position: "relative", display: "flex", alignItems: "center", padding: "0 16px", overflow: "hidden" }}>
                 <input
                   value={inputVal}
                   onChange={(e) => setInputVal(e.target.value)}
@@ -392,7 +392,7 @@ export default function Hero() {
                   </div>
                 )}
               </div>
-              <Link href="/signup" style={{
+              <Link className="prompt-cta-button" href="/signup" style={{
                 display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px",
                 background: "linear-gradient(135deg, #7C3AED 0%, #6D28D9 100%)",
                 color: "#fff", textDecoration: "none",
@@ -525,11 +525,47 @@ export default function Hero() {
           0%,100% { opacity: 1; }
           50%     { opacity: 0.45; }
         }
+
+        /* ── Hero Responsive ── */
+        @media (max-width: 1024px) {
+          .hero-layout { gap: 48px !important; padding: 0 32px !important; }
+        }
         @media (max-width: 900px) {
           .hero-preview { display: none !important; }
+          .hero-layout {
+            flex-direction: column !important;
+            padding: 0 24px !important;
+            gap: 40px !important;
+            align-items: flex-start !important;
+          }
+          .hero-section {
+            padding-top: 100px !important;
+            padding-bottom: 60px !important;
+            justify-content: flex-start !important;
+          }
+          .hero-left { flex: none !important; width: 100% !important; }
+          
+          /* Hide input and show only button on phones/tablets */
+          .prompt-input-wrapper {
+             background: transparent !important;
+             border: none !important;
+             box-shadow: none !important;
+             padding: 0 !important;
+             display: block !important;
+          }
+          .prompt-glow, .prompt-sparkles, .prompt-input-container {
+             display: none !important;
+          }
+          .prompt-cta-button {
+             width: 100% !important;
+             height: 52px !important;
+             font-size: 0.95rem !important;
+             justify-content: center !important;
+          }
         }
         @media (max-width: 600px) {
-          h1 { font-size: 2.3rem !important; }
+          .hero-layout { padding: 0 16px !important; }
+          .hero-section { padding-top: 90px !important; }
         }
       `}</style>
     </section>

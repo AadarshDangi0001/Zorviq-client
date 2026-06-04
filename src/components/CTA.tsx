@@ -69,6 +69,11 @@ export default function CTA() {
           Start Building for Free <ArrowRight size={18} />
         </Link>
       </div>
+      <style>{`
+        @media (max-width: 600px) {
+          #cta { padding: 60px 16px !important; }
+        }
+      `}</style>
     </section>
   );
 }

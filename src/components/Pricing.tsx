@@ -211,7 +211,11 @@ export default function Pricing() {
       <style>{`
         @media (max-width: 900px) {
           .pricing-cards { grid-template-columns: 1fr !important; }
-          .pricing-header { grid-template-columns: 1fr !important; }
+          .pricing-header { grid-template-columns: 1fr !important; gap: 20px !important; }
+        }
+        @media (max-width: 600px) {
+          #pricing { padding: 60px 16px !important; }
+          .pricing-cards > div { padding: 24px !important; }
         }
       `}</style>
     </section>
