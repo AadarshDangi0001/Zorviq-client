@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 interface Message {
@@ -37,6 +37,14 @@ const MOCK_MESSAGES: Record<string, Message[]> = {
 };
 
 export default function ChatPage() {
+  return (
+    <Suspense fallback={<div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center', background: '#060606', color: '#888' }}>Loading chat...</div>}>
+      <ChatContent />
+    </Suspense>
+  );
+}
+
+function ChatContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const chatId = searchParams.get("id") ?? "new";
