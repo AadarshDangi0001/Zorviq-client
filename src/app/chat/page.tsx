@@ -47,7 +47,6 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [isWorking, setIsWorking] = useState(false);
   const [workingStatus, setWorkingStatus] = useState("");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // Load initial prompt from dashboard
   useEffect(() => {
@@ -101,51 +100,17 @@ export default function ChatPage() {
 
   return (
     <div className="chat-root">
-      {/* Left sidebar */}
-      <aside className={`chat-sidebar ${sidebarOpen ? "open" : "closed"}`}>
-        <div className="sidebar-header">
-          <button className="back-btn" onClick={() => router.push("/dashboard")}>← Dashboard</button>
-          <button className="new-chat-btn" onClick={() => { setActiveChat("new"); setMessages([]); }}>+ New</button>
-        </div>
-
-        <div className="chats-list">
-          <p className="chats-label">Recent</p>
-          {MOCK_CHATS.map((chat) => (
-            <button
-              key={chat.id}
-              className={`chat-item ${activeChat === chat.id ? "active" : ""}`}
-              onClick={() => switchChat(chat.id)}
-            >
-              <div className="chat-dot" style={{ background: chat.color }} />
-              <div className="chat-item-body">
-                <span className="chat-item-title">{chat.title}</span>
-                <span className="chat-item-sub">{chat.lastMessage}</span>
-              </div>
-              <span className="chat-item-time">{chat.time}</span>
-            </button>
-          ))}
-        </div>
-      </aside>
-
-      {/* Main chat area */}
-      <div className="chat-main">
-        {/* Top bar */}
+      {/* Chat panel */}
+      <div className="chat-panel">
         <header className="chat-header">
           <div className="chat-header-left">
-            <button className="toggle-sidebar" onClick={() => setSidebarOpen(!sidebarOpen)}>
-              ☰
-            </button>
             <span className="chat-header-title">
               {activeChat !== "new"
                 ? MOCK_CHATS.find((c) => c.id === activeChat)?.title ?? "Chat"
                 : "New Chat"}
             </span>
           </div>
-          <div className="chat-header-right">
-            <button className="header-btn active">Preview</button>
-            <button className="header-btn">Code</button>
-            <button className="header-btn publish">Publish</button>
-          </div>
+          <button className="back-btn" onClick={() => router.push("/dashboard")}>Dashboard</button>
         </header>
 
         {/* Messages */}
@@ -221,6 +186,25 @@ export default function ChatPage() {
         </div>
       </div>
 
+      {/* Preview Panel */}
+      <div className="preview-panel">
+        <header className="preview-header">
+          <div className="preview-tabs">
+            <button className="header-btn active">Preview</button>
+            <button className="header-btn">Code</button>
+          </div>
+          <div className="chat-header-right">
+            <button className="header-btn">Direct Deploy</button>
+            <button className="header-btn publish">Download ZIP</button>
+          </div>
+        </header>
+        <div className="preview-content">
+          <div className="preview-mockup">
+            {messages.length > 0 ? "Preview of your app will appear here" : "Start chatting to see preview"}
+          </div>
+        </div>
+      </div>
+
       <style jsx>{`
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -233,27 +217,6 @@ export default function ChatPage() {
           overflow: hidden;
         }
 
-        /* Sidebar */
-        .chat-sidebar {
-          width: 260px;
-          background: #0A0A0A;
-          border-right: 1px solid rgba(255,255,255,0.05);
-          display: flex;
-          flex-direction: column;
-          transition: width 0.2s, opacity 0.2s;
-          overflow: hidden;
-          flex-shrink: 0;
-        }
-        .chat-sidebar.closed { width: 0; opacity: 0; }
-
-        .sidebar-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 14px 14px;
-          border-bottom: 1px solid rgba(255,255,255,0.05);
-          gap: 8px;
-        }
         .back-btn {
           font-size: 13px;
           color: #888;
@@ -264,54 +227,52 @@ export default function ChatPage() {
           white-space: nowrap;
         }
         .back-btn:hover { color: #fff; }
-        .new-chat-btn {
-          font-size: 12px;
-          background: #1e1e1e;
-          border: 1px solid #2a2a2a;
-          color: #ccc;
-          border-radius: 7px;
-          padding: 5px 10px;
-          cursor: pointer;
-          white-space: nowrap;
-        }
-        .new-chat-btn:hover { background: #2a2a2a; color: #fff; }
 
-        .chats-list { flex: 1; overflow-y: auto; padding: 12px 8px; }
-        .chats-label { font-size: 11px; color: #555; text-transform: uppercase; letter-spacing: 0.08em; padding: 0 8px; margin-bottom: 6px; }
-
-        .chat-item {
-          width: 100%;
-          display: flex;
-          align-items: flex-start;
-          gap: 8px;
-          padding: 9px 10px;
-          border-radius: 9px;
-          border: none;
-          background: transparent;
-          cursor: pointer;
-          text-align: left;
-          transition: background 0.15s;
-          margin-bottom: 2px;
-        }
-        .chat-item:hover { background: #1a1a1a; }
-        .chat-item.active { background: #1e1e1e; }
-        .chat-dot {
-          width: 7px; height: 7px;
-          border-radius: 50%;
-          margin-top: 5px;
-          flex-shrink: 0;
-        }
-        .chat-item-body { flex: 1; min-width: 0; }
-        .chat-item-title { display: block; font-size: 13px; font-weight: 500; color: #ddd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .chat-item-sub { display: block; font-size: 11px; color: #666; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .chat-item-time { font-size: 10px; color: #555; flex-shrink: 0; margin-top: 3px; }
-
-        /* Main */
-        .chat-main {
-          flex: 1;
+        /* Chat Panel */
+        .chat-panel {
+          width: 400px;
           display: flex;
           flex-direction: column;
           overflow: hidden;
+          border-right: 1px solid rgba(255,255,255,0.05);
+          background: #060606;
+          flex-shrink: 0;
+        }
+
+        /* Preview Panel */
+        .preview-panel {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          background: #0A0A0A;
+          overflow: hidden;
+        }
+        .preview-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 10px 16px;
+          border-bottom: 1px solid rgba(255,255,255,0.05);
+          background: #0A0A0A;
+        }
+        .preview-tabs { display: flex; gap: 6px; }
+        .preview-content {
+          flex: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 24px;
+        }
+        .preview-mockup {
+          width: 100%;
+          height: 100%;
+          border: 1px dashed rgba(255,255,255,0.1);
+          border-radius: 12px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #555;
+          font-size: 14px;
         }
 
         /* Header */
@@ -324,10 +285,6 @@ export default function ChatPage() {
           background: #0A0A0A;
         }
         .chat-header-left { display: flex; align-items: center; gap: 10px; }
-        .toggle-sidebar {
-          background: transparent; border: none; color: #888; font-size: 18px; cursor: pointer; padding: 4px;
-        }
-        .toggle-sidebar:hover { color: #fff; }
         .chat-header-title { font-size: 14px; font-weight: 600; color: #e5e5e5; }
         .chat-header-right { display: flex; gap: 6px; align-items: center; }
         .header-btn {

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-const recentChats = [
+const initialProjects = [
   { id: "1", title: "Your Civic Companion", subtitle: "Full-stack civic app", time: "2h ago", color: "#7C3AED" },
   { id: "2", title: "Civic Insight", subtitle: "Report & analytics dashboard", time: "5h ago", color: "#8B5CF6" },
   { id: "3", title: "Cost Explorer", subtitle: "FinOps dashboard", time: "1d ago", color: "#A78BFA" },
@@ -12,6 +12,20 @@ const recentChats = [
 export default function DashboardPage() {
   const router = useRouter();
   const [prompt, setPrompt] = useState("");
+  const [projects, setProjects] = useState(initialProjects);
+
+  const handleEdit = (id: string) => {
+    const newTitle = window.prompt("Enter new project title:");
+    if (newTitle && newTitle.trim()) {
+      setProjects(projects.map(p => p.id === id ? { ...p, title: newTitle.trim() } : p));
+    }
+  };
+
+  const handleDelete = (id: string) => {
+    if (window.confirm("Are you sure you want to delete this project?")) {
+      setProjects(projects.filter(p => p.id !== id));
+    }
+  };
 
   const handleSubmit = () => {
     if (!prompt.trim()) return;
@@ -91,13 +105,23 @@ export default function DashboardPage() {
           </div>
 
           <div className="projects-grid">
-            {recentChats.map((chat) => (
+            <div
+              className="project-card create-new-card"
+              onClick={() => router.push("/chat")}
+            >
+              <div className="create-new-content">
+                <div className="plus-icon">+</div>
+                <div>Create New Project</div>
+              </div>
+            </div>
+
+            {projects.map((project) => (
               <div
-                key={chat.id}
+                key={project.id}
                 className="project-card"
-                onClick={() => router.push(`/chat?id=${chat.id}`)}
+                onClick={() => router.push(`/chat?id=${project.id}`)}
               >
-                <div className="project-preview" style={{ background: `linear-gradient(135deg, ${chat.color}22, ${chat.color}44)` }}>
+                <div className="project-preview" style={{ background: `linear-gradient(135deg, ${project.color}22, ${project.color}44)` }}>
                   <div className="preview-mock">
                     <div className="mock-bar" />
                     <div className="mock-line" />
@@ -105,10 +129,14 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <div className="project-info">
-                  <div className="project-avatar" style={{ background: chat.color }}>K</div>
-                  <div>
-                    <div className="project-title">{chat.title}</div>
-                    <div className="project-sub">{chat.subtitle} · {chat.time}</div>
+                  <div className="project-avatar" style={{ background: project.color }}>K</div>
+                  <div className="project-text">
+                    <div className="project-title">{project.title}</div>
+                    <div className="project-sub">{project.subtitle} · {project.time}</div>
+                  </div>
+                  <div className="project-actions">
+                    <button onClick={(e) => { e.stopPropagation(); handleEdit(project.id); }} className="action-btn" title="Edit">✎</button>
+                    <button onClick={(e) => { e.stopPropagation(); handleDelete(project.id); }} className="action-btn delete" title="Delete">🗑</button>
                   </div>
                 </div>
               </div>
@@ -346,8 +374,29 @@ export default function DashboardPage() {
           font-size: 11px; font-weight: 700; color: #fff;
           flex-shrink: 0;
         }
-        .project-title { font-size: 14px; font-weight: 600; color: #e5e5e5; }
-        .project-sub { font-size: 12px; color: #666; margin-top: 2px; }
+        .project-text { flex: 1; min-width: 0; }
+        .project-title { font-size: 14px; font-weight: 600; color: #e5e5e5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .project-sub { font-size: 12px; color: #666; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        
+        .project-actions {
+          display: flex; gap: 4px; opacity: 0; transition: opacity 0.2s;
+        }
+        .project-card:hover .project-actions { opacity: 1; }
+        .action-btn {
+          background: transparent; border: none; color: #888; font-size: 14px; cursor: pointer; padding: 4px; border-radius: 4px;
+        }
+        .action-btn:hover { background: #222; color: #fff; }
+        .action-btn.delete:hover { color: #f87171; }
+
+        .create-new-card {
+          display: flex; align-items: center; justify-content: center;
+          background: transparent; border: 1px dashed rgba(255,255,255,0.15);
+          height: 100%; min-height: 240px;
+        }
+        .create-new-card:hover { background: rgba(255,255,255,0.02); border-color: rgba(124,58,237,0.4); }
+        .create-new-content { display: flex; flex-direction: column; align-items: center; gap: 12px; color: #888; font-size: 14px; }
+        .plus-icon { width: 40px; height: 40px; border-radius: 50%; background: #1a1a1a; display: flex; align-items: center; justify-content: center; font-size: 24px; color: #A78BFA; transition: transform 0.2s; }
+        .create-new-card:hover .plus-icon { transform: scale(1.1); background: #222; }
       `}</style>
     </div>
   );
