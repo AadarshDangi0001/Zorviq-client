@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ApiUser,
@@ -24,26 +24,36 @@ const relativeTime = (date?: string) => {
   return `${Math.floor(hours / 24)}d ago`;
 };
 
-const projectColor = (index: number) => ["#7C3AED", "#8B5CF6", "#A78BFA", "#6366F1"][index % 4];
-
-const promptTitle = (prompt: string) => {
-  const clean = prompt.replace(/\s+/g, " ").trim();
-  return clean.length > 60 ? `${clean.slice(0, 57)}...` : clean;
-};
+const initials = (name: string) =>
+  name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "Z";
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [prompt, setPrompt] = useState("");
   const [projects, setProjects] = useState<Project[]>([]);
   const [user, setUser] = useState<ApiUser | null>(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
-  const [isCreating, setIsCreating] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [modalMode, setModalMode] = useState<"create" | "edit" | null>(null);
+  const [activeProject, setActiveProject] = useState<Project | null>(null);
+  const [projectName, setProjectName] = useState("");
 
-  const firstName = useMemo(() => {
-    const name = user?.fullname || authStore.getUser()?.fullname || "Builder";
-    return name.split(" ")[0] || "Builder";
-  }, [user]);
+  const displayName = user?.fullname || authStore.getUser()?.fullname || "Builder";
+  const firstName = displayName.split(" ")[0] || "Builder";
+
+  const stats = useMemo(
+    () => ({
+      total: projects.length,
+      generated: projects.filter((project) => Boolean(project.currentCode)).length,
+      drafts: projects.filter((project) => !project.currentCode).length,
+    }),
+    [projects],
+  );
 
   useEffect(() => {
     let alive = true;
@@ -68,51 +78,73 @@ export default function DashboardPage() {
     };
   }, [router]);
 
-  const handleEdit = async (id: string) => {
-    const current = projects.find((project) => project._id === id);
-    const newTitle = window.prompt("Enter new project title:", current?.name ?? "");
-    if (!newTitle?.trim()) return;
-
-    try {
-      const updated = await updateProject(id, { name: newTitle.trim() });
-      setProjects((items) => items.map((item) => (item._id === id ? updated : item)));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not update project");
-    }
+  const openCreateModal = () => {
+    setError("");
+    setActiveProject(null);
+    setProjectName("");
+    setModalMode("create");
   };
 
-  const handleDelete = async (id: string) => {
-    if (!window.confirm("Are you sure you want to delete this project?")) return;
-
-    try {
-      await deleteProject(id);
-      setProjects((items) => items.filter((item) => item._id !== id));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not delete project");
-    }
+  const openEditModal = (project: Project) => {
+    setError("");
+    setActiveProject(project);
+    setProjectName(project.name);
+    setModalMode("edit");
   };
 
-  const startProject = async (initialPrompt?: string) => {
-    const content = initialPrompt?.trim() || prompt.trim();
-    if (!content || isCreating) return;
+  const closeModal = () => {
+    if (isSaving) return;
+    setModalMode(null);
+    setActiveProject(null);
+    setProjectName("");
+  };
+
+  const resetModal = () => {
+    setModalMode(null);
+    setActiveProject(null);
+    setProjectName("");
+  };
+
+  const handleSaveProject = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const name = projectName.trim();
+    if (name.length < 3) {
+      setError("Project name must be at least 3 characters.");
+      return;
+    }
 
     setError("");
-    setIsCreating(true);
+    setIsSaving(true);
     try {
-      const project = await createProject(promptTitle(content));
-      sessionStorage.setItem("initialPrompt", content);
-      router.push(`/chat?id=${project._id}`);
+      if (modalMode === "create") {
+        const project = await createProject(name);
+        setProjects((items) => [project, ...items]);
+        resetModal();
+        router.push(`/chat?id=${project._id}`);
+        return;
+      }
+
+      if (modalMode === "edit" && activeProject) {
+        const updated = await updateProject(activeProject._id, { name });
+        setProjects((items) => items.map((item) => (item._id === updated._id ? updated : item)));
+        resetModal();
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create project");
+      setError(err instanceof Error ? err.message : "Could not save project");
     } finally {
-      setIsCreating(false);
+      setIsSaving(false);
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      startProject();
+  const handleDelete = async (project: Project) => {
+    if (!window.confirm(`Delete "${project.name}"? This cannot be undone.`)) return;
+
+    setError("");
+    try {
+      await deleteProject(project._id);
+      setProjects((items) => items.filter((item) => item._id !== project._id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete project");
     }
   };
 
@@ -123,10 +155,18 @@ export default function DashboardPage() {
 
   if (isLoading) {
     return (
-      <div className="dashboard-root loading-screen">
-        <div>Loading dashboard...</div>
+      <div className="loading-screen">
+        Loading dashboard...
         <style jsx>{`
-          .dashboard-root { min-height: 100vh; background: #060606; color: #888; display: flex; align-items: center; justify-content: center; font-family: 'Segoe UI', system-ui, sans-serif; }
+          .loading-screen {
+            min-height: 100vh;
+            background: #060606;
+            color: #888;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+          }
         `}</style>
       </div>
     );
@@ -135,144 +175,362 @@ export default function DashboardPage() {
   return (
     <div className="dashboard-root">
       <aside className="sidebar">
-        <div className="sidebar-logo">
-          <div className="logo-icon">Z</div>
-        </div>
+        <div className="brand-mark">Z</div>
         <nav className="sidebar-nav">
-          <button className="nav-btn active" title="Home">⌂</button>
-          <button className="nav-btn" title="Projects">⊞</button>
+          <button className="nav-btn active" title="Projects">P</button>
         </nav>
         <div className="sidebar-bottom">
-          <div className="avatar">{firstName.charAt(0).toUpperCase()}</div>
-          <button className="nav-btn" title="Logout" onClick={handleLogout}>↪</button>
+          <div className="avatar" title={displayName}>{initials(displayName)}</div>
+          <button className="nav-btn" title="Logout" onClick={handleLogout}>Q</button>
         </div>
       </aside>
 
       <main className="main">
-        <section className="hero">
-          <h1 className="hero-title">Ready to build, {firstName}?</h1>
-
-          <div className="prompt-card">
-            <textarea
-              className="prompt-input"
-              placeholder="Ask Zorviq to generate a website..."
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              onKeyDown={handleKeyDown}
-              rows={2}
-            />
-            <div className="prompt-actions">
-              <button className="icon-btn" type="button" onClick={() => setPrompt("")}>+</button>
-              <div className="prompt-right">
-                <span className="plan-badge">Build</span>
-                <button
-                  className="send-btn"
-                  onClick={() => startProject()}
-                  disabled={!prompt.trim() || isCreating}
-                >
-                  {isCreating ? "…" : "↑"}
-                </button>
-              </div>
-            </div>
+        <header className="topbar">
+          <div>
+            <p className="eyebrow">Workspace</p>
+            <h1>Projects</h1>
           </div>
-          {error && <p className="error-text">{error}</p>}
+          <button className="primary-btn" onClick={openCreateModal}>Create Project</button>
+        </header>
+
+        <section className="welcome-panel">
+          <div>
+            <p className="eyebrow">Welcome back</p>
+            <h2>{firstName}, choose a project or start a new one.</h2>
+          </div>
+          <div className="stats">
+            <div><strong>{stats.total}</strong><span>Total</span></div>
+            <div><strong>{stats.generated}</strong><span>Generated</span></div>
+            <div><strong>{stats.drafts}</strong><span>Drafts</span></div>
+          </div>
         </section>
 
+        {error && <p className="error-text">{error}</p>}
+
         <section className="projects-section">
-          <div className="tabs">
-            <button className="tab active">My projects</button>
-            <span className="browse-all">{projects.length} total</span>
+          <div className="section-header">
+            <h2>My projects</h2>
+            <span>{projects.length} total</span>
           </div>
 
-          <div className="projects-grid">
-            <div className="project-card create-new-card" onClick={() => startProject("Create a modern responsive website")}>
-              <div className="create-new-content">
-                <div className="plus-icon">+</div>
-                <div>Create New Project</div>
-              </div>
+          {projects.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-mark">+</div>
+              <h3>No projects yet</h3>
+              <p>Create a named project first, then use chat prompts inside that project.</p>
+              <button className="primary-btn" onClick={openCreateModal}>Create Project</button>
             </div>
-
-            {projects.map((project, index) => {
-              const color = projectColor(index);
-              return (
-                <div key={project._id} className="project-card" onClick={() => router.push(`/chat?id=${project._id}`)}>
-                  <div className="project-preview" style={{ background: `linear-gradient(135deg, ${color}22, ${color}44)` }}>
-                    <div className="preview-mock">
-                      <div className="mock-bar" />
-                      <div className="mock-line" />
-                      <div className="mock-line short" />
+          ) : (
+            <div className="projects-grid">
+              {projects.map((project) => (
+                <article key={project._id} className="project-card">
+                  <button className="project-open" onClick={() => router.push(`/chat?id=${project._id}`)}>
+                    <div className="project-preview">
+                      <div className="preview-window">
+                        <span />
+                        <span />
+                        <span className="short" />
+                      </div>
                     </div>
+                    <div className="project-copy">
+                      <h3>{project.name}</h3>
+                      <p>{project.currentCode ? "Generated website" : "Draft project"} · {relativeTime(project.updatedAt)}</p>
+                    </div>
+                  </button>
+                  <div className="project-actions">
+                    <button onClick={() => router.push(`/chat?id=${project._id}`)}>Open</button>
+                    <button onClick={() => openEditModal(project)}>Update</button>
+                    <button className="danger" onClick={() => handleDelete(project)}>Delete</button>
                   </div>
-                  <div className="project-info">
-                    <div className="project-avatar" style={{ background: color }}>{firstName.charAt(0).toUpperCase()}</div>
-                    <div className="project-text">
-                      <div className="project-title">{project.name}</div>
-                      <div className="project-sub">{project.currentCode ? "Generated" : "Draft"} · {relativeTime(project.updatedAt)}</div>
-                    </div>
-                    <div className="project-actions">
-                      <button onClick={(e) => { e.stopPropagation(); handleEdit(project._id); }} className="action-btn" title="Edit">✎</button>
-                      <button onClick={(e) => { e.stopPropagation(); handleDelete(project._id); }} className="action-btn delete" title="Delete">⌫</button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                </article>
+              ))}
+            </div>
+          )}
         </section>
       </main>
 
+      {modalMode && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={closeModal}>
+          <form className="modal" onSubmit={handleSaveProject} onMouseDown={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <h2>{modalMode === "create" ? "Create project" : "Update project"}</h2>
+              <button type="button" onClick={closeModal} aria-label="Close">x</button>
+            </div>
+            <label>
+              Project name
+              <input
+                value={projectName}
+                onChange={(event) => setProjectName(event.target.value)}
+                placeholder="Landing page redesign"
+                autoFocus
+                maxLength={100}
+              />
+            </label>
+            <div className="modal-actions">
+              <button type="button" onClick={closeModal}>Cancel</button>
+              <button className="primary-btn" disabled={isSaving || projectName.trim().length < 3}>
+                {isSaving ? "Saving..." : modalMode === "create" ? "Create and Open" : "Save"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       <style jsx>{`
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        .dashboard-root { display: flex; min-height: 100vh; background: #060606; color: #fff; font-family: 'Segoe UI', system-ui, sans-serif; }
-        .sidebar { width: 60px; background: #0a0a0a; display: flex; flex-direction: column; align-items: center; padding: 16px 0; border-right: 1px solid rgba(255,255,255,0.05); position: fixed; top: 0; left: 0; bottom: 0; z-index: 10; }
-        .sidebar-logo { margin-bottom: 24px; }
-        .logo-icon { width: 32px; height: 32px; border-radius: 8px; background: #171717; color: #A78BFA; display: flex; align-items: center; justify-content: center; font-weight: 800; }
-        .sidebar-nav { display: flex; flex-direction: column; gap: 8px; flex: 1; }
-        .sidebar-bottom { display: flex; flex-direction: column; align-items: center; gap: 12px; }
-        .nav-btn { width: 38px; height: 38px; border-radius: 10px; border: none; background: transparent; color: #888; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.15s, color 0.15s; }
-        .nav-btn:hover, .nav-btn.active { background: #1e1e1e; color: #fff; }
-        .avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #7C3AED, #6D28D9); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #fff; }
-        .main { margin-left: 60px; flex: 1; display: flex; flex-direction: column; }
-        .hero { min-height: 52vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 24px 40px; background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(124,58,237,0.15) 0%, rgba(109,40,217,0.05) 45%, transparent 70%), linear-gradient(180deg, rgba(6,6,6,0.5) 0%, #060606 100%); }
-        .hero-title { font-size: clamp(26px, 4vw, 42px); font-weight: 700; text-align: center; margin-bottom: 32px; }
-        .prompt-card { width: 100%; max-width: 660px; background: rgba(10,10,10,0.96); border: 1px solid rgba(255,255,255,0.07); border-radius: 18px; padding: 16px 16px 12px; box-shadow: 0 8px 40px #0008; }
-        .prompt-input { width: 100%; background: transparent; border: none; outline: none; color: #ccc; font-size: 15px; resize: none; min-height: 52px; line-height: 1.5; }
-        .prompt-input::placeholder { color: #555; }
-        .prompt-actions { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
-        .prompt-right { display: flex; align-items: center; gap: 8px; }
-        .plan-badge { font-size: 13px; color: #A78BFA; padding: 4px 8px; border-radius: 8px; background: rgba(124,58,237,0.15); }
-        .icon-btn { width: 32px; height: 32px; border-radius: 8px; border: 1px solid #2a2a2a; background: transparent; color: #888; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-        .icon-btn:hover { background: #222; color: #fff; }
-        .send-btn { width: 36px; height: 36px; border-radius: 50%; border: none; background: linear-gradient(135deg, #7C3AED, #6D28D9); color: #fff; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-        .send-btn:disabled { opacity: 0.4; cursor: default; }
-        .error-text { color: #f87171; font-size: 13px; margin-top: 16px; }
-        .projects-section { border-top: 1px solid rgba(255,255,255,0.05); padding: 24px 32px 40px; flex: 1; }
-        .tabs { display: flex; align-items: center; gap: 4px; margin-bottom: 24px; flex-wrap: wrap; }
-        .tab { padding: 6px 16px; border-radius: 8px; border: 1px solid transparent; background: transparent; color: #888; font-size: 14px; cursor: pointer; }
-        .tab.active { background: #1e1e1e; color: #fff; border-color: #2a2a2a; }
-        .browse-all { margin-left: auto; font-size: 13px; color: #888; }
-        .projects-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
-        .project-card { background: #0A0A0A; border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; overflow: hidden; cursor: pointer; transition: border-color 0.15s, transform 0.15s; }
-        .project-card:hover { border-color: rgba(124,58,237,0.3); transform: translateY(-2px); box-shadow: 0 8px 32px rgba(124,58,237,0.1); }
-        .project-preview { height: 180px; display: flex; align-items: center; justify-content: center; padding: 24px; }
-        .preview-mock { width: 100%; max-width: 200px; display: flex; flex-direction: column; gap: 8px; }
-        .mock-bar { height: 8px; border-radius: 4px; background: rgba(255,255,255,0.15); width: 60%; }
-        .mock-line { height: 5px; border-radius: 3px; background: rgba(255,255,255,0.08); width: 100%; }
-        .mock-line.short { width: 70%; }
-        .project-info { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-top: 1px solid #1e1e1e; }
-        .project-avatar { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; flex-shrink: 0; }
-        .project-text { flex: 1; min-width: 0; }
-        .project-title { font-size: 14px; font-weight: 600; color: #e5e5e5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .project-sub { font-size: 12px; color: #666; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .project-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.2s; }
-        .project-card:hover .project-actions { opacity: 1; }
-        .action-btn { background: transparent; border: none; color: #888; font-size: 14px; cursor: pointer; padding: 4px; border-radius: 4px; }
-        .action-btn:hover { background: #222; color: #fff; }
-        .action-btn.delete:hover { color: #f87171; }
-        .create-new-card { display: flex; align-items: center; justify-content: center; background: transparent; border: 1px dashed rgba(255,255,255,0.15); height: 100%; min-height: 240px; }
-        .create-new-card:hover { background: rgba(255,255,255,0.02); border-color: rgba(124,58,237,0.4); }
-        .create-new-content { display: flex; flex-direction: column; align-items: center; gap: 12px; color: #888; font-size: 14px; }
-        .plus-icon { width: 40px; height: 40px; border-radius: 50%; background: #1a1a1a; display: flex; align-items: center; justify-content: center; font-size: 24px; color: #A78BFA; }
+        * { box-sizing: border-box; }
+        .dashboard-root {
+          min-height: 100vh;
+          background: #070707;
+          color: #f4f4f5;
+          display: flex;
+          font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+        .sidebar {
+          width: 68px;
+          background: #0d0d0f;
+          border-right: 1px solid rgba(255,255,255,0.08);
+          position: fixed;
+          inset: 0 auto 0 0;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          padding: 18px 0;
+        }
+        .brand-mark, .avatar {
+          width: 38px;
+          height: 38px;
+          border-radius: 10px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-weight: 800;
+          background: linear-gradient(135deg, #7c3aed, #2563eb);
+        }
+        .sidebar-nav { flex: 1; margin-top: 28px; }
+        .sidebar-bottom { display: flex; flex-direction: column; gap: 14px; align-items: center; }
+        .nav-btn {
+          width: 38px;
+          height: 38px;
+          border: 1px solid transparent;
+          border-radius: 10px;
+          background: transparent;
+          color: #8b8b93;
+          cursor: pointer;
+          font-weight: 700;
+        }
+        .nav-btn:hover, .nav-btn.active { background: #1a1a1d; color: #fff; border-color: #25252a; }
+        .avatar { border-radius: 50%; font-size: 12px; }
+        .main {
+          margin-left: 68px;
+          width: calc(100% - 68px);
+          padding: 32px;
+        }
+        .topbar, .section-header, .project-actions, .modal-header, .modal-actions {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+        }
+        h1, h2, h3, p { margin: 0; }
+        h1 { font-size: 34px; }
+        .eyebrow {
+          color: #8b8b93;
+          font-size: 12px;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          margin-bottom: 6px;
+        }
+        .primary-btn {
+          border: 0;
+          border-radius: 8px;
+          background: linear-gradient(135deg, #7c3aed, #2563eb);
+          color: #fff;
+          padding: 10px 16px;
+          font-weight: 700;
+          cursor: pointer;
+        }
+        .primary-btn:disabled { opacity: 0.55; cursor: default; }
+        .welcome-panel {
+          margin: 28px 0;
+          padding: 24px;
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 8px;
+          background: linear-gradient(135deg, rgba(124,58,237,0.16), rgba(37,99,235,0.08)), #0d0d0f;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 24px;
+        }
+        .welcome-panel h2 { font-size: clamp(22px, 3vw, 34px); max-width: 720px; }
+        .stats { display: grid; grid-template-columns: repeat(3, 92px); gap: 10px; }
+        .stats div {
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 8px;
+          padding: 12px;
+          background: rgba(0,0,0,0.22);
+        }
+        .stats strong { display: block; font-size: 24px; }
+        .stats span { color: #9ca3af; font-size: 12px; }
+        .error-text {
+          color: #f87171;
+          font-size: 13px;
+          margin: 0 0 16px;
+        }
+        .projects-section {
+          border-top: 1px solid rgba(255,255,255,0.08);
+          padding-top: 24px;
+        }
+        .section-header { margin-bottom: 18px; }
+        .section-header span { color: #8b8b93; font-size: 13px; }
+        .projects-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+          gap: 16px;
+        }
+        .project-card {
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 8px;
+          background: #0d0d0f;
+          overflow: hidden;
+        }
+        .project-open {
+          display: block;
+          width: 100%;
+          text-align: left;
+          background: transparent;
+          border: 0;
+          color: inherit;
+          cursor: pointer;
+          padding: 0;
+        }
+        .project-card:hover { border-color: rgba(124,58,237,0.45); }
+        .project-preview {
+          height: 156px;
+          display: grid;
+          place-items: center;
+          background: linear-gradient(135deg, rgba(124,58,237,0.2), rgba(37,99,235,0.18));
+        }
+        .preview-window {
+          width: 72%;
+          display: flex;
+          flex-direction: column;
+          gap: 9px;
+        }
+        .preview-window span {
+          display: block;
+          height: 8px;
+          border-radius: 8px;
+          background: rgba(255,255,255,0.22);
+        }
+        .preview-window .short { width: 64%; }
+        .project-copy { padding: 14px 16px; }
+        .project-copy h3 {
+          font-size: 15px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .project-copy p {
+          color: #8b8b93;
+          font-size: 12px;
+          margin-top: 5px;
+        }
+        .project-actions {
+          border-top: 1px solid rgba(255,255,255,0.07);
+          padding: 10px;
+          justify-content: flex-start;
+        }
+        .project-actions button, .modal-actions button {
+          border: 1px solid #2a2a31;
+          border-radius: 7px;
+          background: #141418;
+          color: #d4d4d8;
+          padding: 7px 10px;
+          cursor: pointer;
+        }
+        .modal-actions .primary-btn {
+          border: 0;
+          background: linear-gradient(135deg, #7c3aed, #2563eb);
+          color: #fff;
+          font-weight: 700;
+        }
+        .project-actions .danger { color: #fca5a5; }
+        .empty-state {
+          min-height: 320px;
+          border: 1px dashed rgba(255,255,255,0.16);
+          border-radius: 8px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 12px;
+          color: #d4d4d8;
+          text-align: center;
+          padding: 24px;
+        }
+        .empty-state p { color: #8b8b93; max-width: 420px; line-height: 1.5; }
+        .empty-mark {
+          width: 44px;
+          height: 44px;
+          border-radius: 8px;
+          display: grid;
+          place-items: center;
+          background: #17171b;
+          color: #a78bfa;
+          font-size: 24px;
+        }
+        .modal-backdrop {
+          position: fixed;
+          inset: 0;
+          background: rgba(0,0,0,0.72);
+          display: grid;
+          place-items: center;
+          padding: 20px;
+          z-index: 20;
+        }
+        .modal {
+          width: min(440px, 100%);
+          border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 8px;
+          background: #0d0d0f;
+          padding: 22px;
+          box-shadow: 0 24px 80px rgba(0,0,0,0.55);
+        }
+        .modal-header { margin-bottom: 20px; }
+        .modal-header button {
+          width: 30px;
+          height: 30px;
+          border-radius: 7px;
+          border: 1px solid #2a2a31;
+          background: #141418;
+          color: #d4d4d8;
+          cursor: pointer;
+        }
+        label {
+          display: grid;
+          gap: 8px;
+          color: #a1a1aa;
+          font-size: 13px;
+        }
+        input {
+          width: 100%;
+          border: 1px solid #2a2a31;
+          border-radius: 8px;
+          background: #151519;
+          color: #fff;
+          padding: 12px 13px;
+          font-size: 14px;
+          outline: none;
+        }
+        input:focus { border-color: rgba(124,58,237,0.7); }
+        .modal-actions { margin-top: 20px; justify-content: flex-end; }
+        @media (max-width: 760px) {
+          .sidebar { display: none; }
+          .main { margin-left: 0; width: 100%; padding: 20px; }
+          .topbar, .welcome-panel { align-items: flex-start; flex-direction: column; }
+          .stats { width: 100%; grid-template-columns: repeat(3, 1fr); }
+        }
       `}</style>
     </div>
   );

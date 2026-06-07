@@ -6,7 +6,6 @@ import {
   API_BASE_URL,
   Project,
   authStore,
-  createProject,
   enqueueGeneration,
   getGenerationStatus,
   getProject,
@@ -77,8 +76,7 @@ function ChatContent() {
     const load = async () => {
       try {
         if (!queryProjectId) {
-          const created = await createProject("Untitled project");
-          router.replace(`/chat?id=${created._id}`);
+          router.replace("/dashboard");
           return;
         }
 

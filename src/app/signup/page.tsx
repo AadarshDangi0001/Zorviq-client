@@ -20,7 +20,7 @@ export default function SignUpPage() {
     setIsSubmitting(true);
 
     try {
-      await registerUser({ fullname, contact, email, password });
+      await registerUser({ fullname, contact: contact.trim() || undefined, email, password });
       router.push("/login?registered=1");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Signup failed");
@@ -73,7 +73,7 @@ export default function SignUpPage() {
 
           {[
             { label: "Full name", type: "text", value: fullname, setter: setFullname, placeholder: "Your name" },
-            { label: "Contact", type: "tel", value: contact, setter: setContact, placeholder: "10 digit mobile number" },
+            { label: "Contact", type: "tel", value: contact, setter: setContact, placeholder: "Optional 10 digit mobile number" },
             { label: "Email", type: "email", value: email, setter: setEmail, placeholder: "you@example.com" },
             { label: "Password", type: "password", value: password, setter: setPassword, placeholder: "Min. 6 characters" },
           ].map(({ label, type, value, setter, placeholder }) => (
@@ -86,7 +86,7 @@ export default function SignUpPage() {
                 value={value}
                 onChange={(event) => setter(event.target.value)}
                 placeholder={placeholder}
-                required
+                required={label !== "Contact"}
                 minLength={label === "Password" ? 6 : undefined}
                 pattern={label === "Contact" ? "\\d{10}" : undefined}
                 style={{

@@ -108,7 +108,7 @@ export async function loginUser(email: string, password: string) {
 export async function registerUser(payload: {
   fullname: string;
   email: string;
-  contact: string;
+  contact?: string;
   password: string;
 }) {
   const response = await apiFetch<{ user: ApiUser }>("/api/auth/register", {
