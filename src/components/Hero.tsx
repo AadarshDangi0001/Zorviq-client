@@ -4,6 +4,8 @@ import { ArrowRight, Sparkles } from "lucide-react";
 import WebsiteShowcase from "@/components/WebsiteShowcase";
 import { useTranslation } from "react-i18next";
 import { useState, useEffect, useRef } from "react";
+import { authStore } from "@/lib/api";
+import { useCurrentUser } from "@/react-query-config/queries/use-auth-queries";
 import "@/i18n";
 
 /* ─── Data ─────────────────────────────────────────── */
@@ -17,6 +19,13 @@ const PROMPTS = [
 
 export default function Hero() {
   const { t } = useTranslation();
+  const { data: user } = useCurrentUser();
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    setIsLoggedIn(Boolean(user || (typeof window !== "undefined" && authStore.get())));
+  }, [user]);
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mouseRef = useRef({ x: 0, y: 0 });
   const animRef = useRef<number>(0);
@@ -384,7 +393,7 @@ export default function Hero() {
                   </div>
                 )}
               </div>
-              <Link className="prompt-cta-button" href="/signup" style={{
+              <Link className="prompt-cta-button" href={isLoggedIn ? "/dashboard" : "/signup"} style={{
                 display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px",
                 background: "linear-gradient(135deg, #7C3AED 0%, #6D28D9 100%)",
                 color: "#fff", textDecoration: "none",

@@ -2,10 +2,12 @@
 
 import { FormEvent, useEffect, useMemo, useState, type ComponentType } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   BriefcaseBusiness,
   ExternalLink,
   FolderKanban,
+  Home,
   Landmark,
   LogOut,
   Mail,
@@ -257,8 +259,15 @@ export default function DashboardPage() {
   return (
     <div className="dashboard-root">
       <aside className="sidebar">
-        <div className="brand-mark">Z</div>
+        <Link href="/" style={{ textDecoration: "none" }}>
+          <div className="brand-mark" style={{ cursor: "pointer" }}>Z</div>
+        </Link>
         <nav className="sidebar-nav">
+          <Link href="/" style={{ textDecoration: "none" }}>
+            <button className="nav-btn" title="Home" aria-label="Home">
+              <Home size={18} />
+            </button>
+          </Link>
           <button className="nav-btn active" title="Projects" aria-label="Projects">
             <FolderKanban size={18} />
           </button>
@@ -537,7 +546,13 @@ export default function DashboardPage() {
           background: #7C3AED;
           box-shadow: 0 0 28px rgba(124,58,237,0.34);
         }
-        .sidebar-nav { flex: 1; margin-top: 28px; }
+        .sidebar-nav {
+          flex: 1;
+          margin-top: 28px;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
         .sidebar-bottom { display: flex; flex-direction: column; gap: 14px; align-items: center; }
         .nav-btn {
           width: 42px;

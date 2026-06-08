@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Check } from "lucide-react";
+import { authStore } from "@/lib/api";
+import { useCurrentUser } from "@/react-query-config/queries/use-auth-queries";
 
 const plans = [
   {
@@ -48,6 +50,12 @@ const plans = [
 
 export default function Pricing() {
   const [yearly, setYearly] = useState(false);
+  const { data: user } = useCurrentUser();
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    setIsLoggedIn(Boolean(user || (typeof window !== "undefined" && authStore.get())));
+  }, [user]);
 
   return (
     <section id="pricing" style={{ padding: "96px 24px", position: "relative", background: "#060608" }}>
@@ -91,7 +99,7 @@ export default function Pricing() {
                   </div>
                 ))}
               </div>
-              <Link href="/signup" className={plan.popular ? "plan-cta solid" : "plan-cta"}>
+              <Link href={isLoggedIn ? "/dashboard" : "/signup"} className={plan.popular ? "plan-cta solid" : "plan-cta"}>
                 Get started
               </Link>
             </article>

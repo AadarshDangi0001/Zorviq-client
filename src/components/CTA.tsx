@@ -1,8 +1,17 @@
 "use client";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { authStore } from "@/lib/api";
+import { useCurrentUser } from "@/react-query-config/queries/use-auth-queries";
 
 export default function CTA() {
+  const { data: user } = useCurrentUser();
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    setIsLoggedIn(Boolean(user || (typeof window !== "undefined" && authStore.get())));
+  }, [user]);
   return (
     <section
       id="cta"
@@ -45,7 +54,7 @@ export default function CTA() {
           Join thousands of creators who are building faster with AI.
         </p>
         <Link
-          href="/signup"
+          href={isLoggedIn ? "/dashboard" : "/signup"}
           style={{
             display: "inline-flex", alignItems: "center", gap: "8px",
             background: "linear-gradient(135deg,#7C3AED,#6366F1)",

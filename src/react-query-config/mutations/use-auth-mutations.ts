@@ -16,7 +16,7 @@ export const useLogin = () => {
         typeof window === "undefined"
           ? null
           : new URLSearchParams(window.location.search).get("next");
-      router.replace(nextPath || "/dashboard");
+      router.replace(nextPath || "/");
     },
   });
 };

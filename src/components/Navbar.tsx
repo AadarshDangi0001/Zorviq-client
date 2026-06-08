@@ -2,6 +2,9 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { Menu, X, ChevronDown } from "lucide-react";
+import { authStore } from "@/lib/api";
+import { useCurrentUser } from "@/react-query-config/queries/use-auth-queries";
+import { useLogout } from "@/react-query-config/mutations/use-auth-mutations";
 
 // ─── Mega-menu data ───────────────────────────────────────────────────────────
 
@@ -351,6 +354,18 @@ export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState<string | null>(null);
 
+  const { data: user } = useCurrentUser();
+  const logout = useLogout();
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    setIsLoggedIn(Boolean(user || (typeof window !== "undefined" && authStore.get())));
+  }, [user]);
+
+  const handleLogout = async () => {
+    await logout.mutateAsync();
+  };
+
   useEffect(() => {
     const handler = () => setScrolled(window.scrollY > 20);
     window.addEventListener("scroll", handler, { passive: true });
@@ -465,56 +480,115 @@ export default function Navbar() {
               flexShrink: 0,
             }}
           >
-            <Link
-              href="/login"
-              style={{
-                color: "#888",
-                textDecoration: "none",
-                fontSize: "0.875rem",
-                fontWeight: 500,
-                padding: "8px 16px",
-                transition: "color 0.2s",
-                whiteSpace: "nowrap",
-              }}
-              className="hidden-mobile"
-              onMouseEnter={(e) => (e.currentTarget.style.color = "#fff")}
-              onMouseLeave={(e) => (e.currentTarget.style.color = "#888")}
-            >
-              Log in
-            </Link>
-            <Link
-              href="/signup"
-              style={{
-                background: "linear-gradient(135deg, #7C3AED 0%, #6D28D9 100%)",
-                color: "#fff",
-                textDecoration: "none",
-                fontSize: "0.875rem",
-                fontWeight: 600,
-                padding: scrolled ? "7px 16px" : "9px 20px",
-                borderRadius: "8px",
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-                transition: "all 0.4s cubic-bezier(0.4,0,0.2,1)",
-                boxShadow: "0 1px 0 rgba(255,255,255,0.10) inset, 0 0 20px rgba(124,58,237,0.22)",
-                whiteSpace: "nowrap",
-              }}
-              className="hidden-mobile"
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLElement).style.boxShadow =
-                  "0 1px 0 rgba(255,255,255,0.12) inset, 0 0 32px rgba(124,58,237,0.40)";
-                (e.currentTarget as HTMLElement).style.transform =
-                  "translateY(-1px)";
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLElement).style.boxShadow =
-                  "0 1px 0 rgba(255,255,255,0.10) inset, 0 0 20px rgba(124,58,237,0.22)";
-                (e.currentTarget as HTMLElement).style.transform =
-                  "translateY(0)";
-              }}
-            >
-              Start Building →
-            </Link>
+            {isLoggedIn ? (
+              <>
+                <Link
+                  href="/dashboard"
+                  style={{
+                    color: "#888",
+                    textDecoration: "none",
+                    fontSize: "0.875rem",
+                    fontWeight: 500,
+                    padding: "8px 16px",
+                    transition: "color 0.2s",
+                    whiteSpace: "nowrap",
+                  }}
+                  className="hidden-mobile"
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "#fff")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "#888")}
+                >
+                  Dashboard
+                </Link>
+                <button
+                  onClick={handleLogout}
+                  style={{
+                    background: "linear-gradient(135deg, #7C3AED 0%, #6D28D9 100%)",
+                    color: "#fff",
+                    border: "none",
+                    textDecoration: "none",
+                    fontSize: "0.875rem",
+                    fontWeight: 600,
+                    padding: scrolled ? "7px 16px" : "9px 20px",
+                    borderRadius: "8px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    cursor: "pointer",
+                    transition: "all 0.4s cubic-bezier(0.4,0,0.2,1)",
+                    boxShadow: "0 1px 0 rgba(255,255,255,0.10) inset, 0 0 20px rgba(124,58,237,0.22)",
+                    whiteSpace: "nowrap",
+                  }}
+                  className="hidden-mobile"
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLElement).style.boxShadow =
+                      "0 1px 0 rgba(255,255,255,0.12) inset, 0 0 32px rgba(124,58,237,0.40)";
+                    (e.currentTarget as HTMLElement).style.transform =
+                      "translateY(-1px)";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLElement).style.boxShadow =
+                      "0 1px 0 rgba(255,255,255,0.10) inset, 0 0 20px rgba(124,58,237,0.22)";
+                    (e.currentTarget as HTMLElement).style.transform =
+                      "translateY(0)";
+                  }}
+                >
+                  Log out
+                </button>
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  style={{
+                    color: "#888",
+                    textDecoration: "none",
+                    fontSize: "0.875rem",
+                    fontWeight: 500,
+                    padding: "8px 16px",
+                    transition: "color 0.2s",
+                    whiteSpace: "nowrap",
+                  }}
+                  className="hidden-mobile"
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "#fff")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "#888")}
+                >
+                  Log in
+                </Link>
+                <Link
+                  href="/signup"
+                  style={{
+                    background: "linear-gradient(135deg, #7C3AED 0%, #6D28D9 100%)",
+                    color: "#fff",
+                    textDecoration: "none",
+                    fontSize: "0.875rem",
+                    fontWeight: 600,
+                    padding: scrolled ? "7px 16px" : "9px 20px",
+                    borderRadius: "8px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    transition: "all 0.4s cubic-bezier(0.4,0,0.2,1)",
+                    boxShadow: "0 1px 0 rgba(255,255,255,0.10) inset, 0 0 20px rgba(124,58,237,0.22)",
+                    whiteSpace: "nowrap",
+                  }}
+                  className="hidden-mobile"
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLElement).style.boxShadow =
+                      "0 1px 0 rgba(255,255,255,0.12) inset, 0 0 32px rgba(124,58,237,0.40)";
+                    (e.currentTarget as HTMLElement).style.transform =
+                      "translateY(-1px)";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLElement).style.boxShadow =
+                      "0 1px 0 rgba(255,255,255,0.10) inset, 0 0 20px rgba(124,58,237,0.22)";
+                    (e.currentTarget as HTMLElement).style.transform =
+                      "translateY(0)";
+                  }}
+                >
+                  Start Building →
+                </Link>
+              </>
+            )}
             <button
               onClick={() => setMobileOpen(!mobileOpen)}
               style={{
@@ -638,22 +712,66 @@ export default function Navbar() {
                 )}
               </div>
             ))}
-            <Link
-              href="/signup"
-              style={{
-                background: "linear-gradient(135deg, #7C3AED 0%, #6D28D9 100%)",
-                color: "#fff",
-                textDecoration: "none",
-                fontSize: "0.9rem",
-                fontWeight: 600,
-                padding: "12px 20px",
-                borderRadius: "8px",
-                textAlign: "center",
-                marginTop: "12px",
-              }}
-            >
-              Start Building →
-            </Link>
+            {isLoggedIn ? (
+              <>
+                <Link
+                  href="/dashboard"
+                  onClick={() => setMobileOpen(false)}
+                  style={{
+                    background: "rgba(255, 255, 255, 0.08)",
+                    color: "#fff",
+                    textDecoration: "none",
+                    fontSize: "0.9rem",
+                    fontWeight: 600,
+                    padding: "12px 20px",
+                    borderRadius: "8px",
+                    textAlign: "center",
+                    marginTop: "12px",
+                    border: "1px solid rgba(255, 255, 255, 0.1)",
+                  }}
+                >
+                  Dashboard
+                </Link>
+                <button
+                  onClick={async () => {
+                    setMobileOpen(false);
+                    await handleLogout();
+                  }}
+                  style={{
+                    background: "linear-gradient(135deg, #7C3AED 0%, #6D28D9 100%)",
+                    color: "#fff",
+                    border: "none",
+                    fontSize: "0.9rem",
+                    fontWeight: 600,
+                    padding: "12px 20px",
+                    borderRadius: "8px",
+                    cursor: "pointer",
+                    textAlign: "center",
+                    marginTop: "8px",
+                  }}
+                >
+                  Log out
+                </button>
+              </>
+            ) : (
+              <Link
+                href="/signup"
+                onClick={() => setMobileOpen(false)}
+                style={{
+                  background: "linear-gradient(135deg, #7C3AED 0%, #6D28D9 100%)",
+                  color: "#fff",
+                  textDecoration: "none",
+                  fontSize: "0.9rem",
+                  fontWeight: 600,
+                  padding: "12px 20px",
+                  borderRadius: "8px",
+                  textAlign: "center",
+                  marginTop: "12px",
+                }}
+              >
+                Start Building →
+              </Link>
+            )}
           </div>
         )}
       </div>

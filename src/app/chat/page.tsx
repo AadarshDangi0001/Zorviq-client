@@ -33,7 +33,7 @@ const defaultCode = `<!doctype html>
     </style>
   </head>
   <body>
-    <main>
+    <main data-section-id="main">
       <h1>Your preview is ready</h1>
       <p>Generate or edit this project and Zorviq will render the latest code here.</p>
     </main>
@@ -83,11 +83,268 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
   const [error, setError] = useState("");
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
+  const [activeSectionEdit, setActiveSectionEdit] = useState<{
+    sectionId: string;
+    originalCode: string;
+  } | null>(null);
+  const [streamingSectionCode, setStreamingSectionCode] = useState("");
+  const activeSectionEditRef = useRef<{ sectionId: string; originalCode: string } | null>(null);
+
+  const applySectionEditClient = (currentCode: string, sectionId: string, newSectionHtml: string): string => {
+    if (!currentCode) return newSectionHtml;
+    const escapedId = sectionId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const openTagPattern = new RegExp(
+      `<([a-zA-Z][a-zA-Z0-9]*)([^>]*data-section-id=["']${escapedId}["'][^>]*)>`,
+      's'
+    );
+
+    const match = openTagPattern.exec(currentCode);
+    if (!match) {
+      return currentCode;
+    }
+
+    const tagName = match[1];
+    const startIndex = match.index;
+
+    let depth = 0;
+    let i = startIndex;
+    const openPattern = new RegExp(`<${tagName}(\\s|>)`, 'gi');
+    const closePattern = new RegExp(`</${tagName}>`, 'gi');
+
+    openPattern.lastIndex = startIndex;
+    closePattern.lastIndex = startIndex;
+
+    let endIndex = -1;
+
+    while (i < currentCode.length) {
+      const nextOpen = openPattern.exec(currentCode);
+      const nextClose = closePattern.exec(currentCode);
+
+      if (!nextClose) break;
+
+      if (nextOpen && nextOpen.index < nextClose.index) {
+        depth++;
+        i = nextOpen.index + 1;
+        openPattern.lastIndex = i;
+        closePattern.lastIndex = i;
+      } else {
+        if (depth === 1) {
+          endIndex = nextClose.index + `</${tagName}>`.length;
+          break;
+        }
+        depth--;
+        i = nextClose.index + 1;
+        openPattern.lastIndex = i;
+        closePattern.lastIndex = i;
+      }
+    }
+
+    if (endIndex === -1) {
+      return currentCode;
+    }
+
+    return currentCode.slice(0, startIndex) + newSectionHtml + currentCode.slice(endIndex);
+  };
+
   const projectId = project?._id;
   const storedCode = project?.currentCode ?? "";
-  const activeCode = generatedCode || storedCode;
+
+  const activeCode = useMemo(() => {
+    if (activeSectionEdit && streamingSectionCode) {
+      return applySectionEditClient(
+        activeSectionEdit.originalCode,
+        activeSectionEdit.sectionId,
+        streamingSectionCode
+      );
+    }
+    return generatedCode || storedCode;
+  }, [activeSectionEdit, streamingSectionCode, generatedCode, storedCode]);
+
   const hasCopiedActiveCode = Boolean(activeCode) && copiedCode === activeCode;
-  const previewHtml = useMemo(() => activeCode || defaultCode, [activeCode]);
+  const previewHtml = useMemo(() => {
+    const code = activeCode || defaultCode;
+    const script = `
+<script id="zorviq-inspector">
+  (function() {
+    let inspectActive = false;
+    let hoveredEl = null;
+    window.addEventListener("message", (e) => {
+      if (e.data.type === "SET_INSPECT_ACTIVE") {
+        inspectActive = e.data.active;
+        if (!inspectActive && hoveredEl) {
+          hoveredEl.style.outline = "";
+          hoveredEl.style.outlineOffset = "";
+          hoveredEl.style.cursor = "";
+          hoveredEl = null;
+        }
+      }
+    });
+    document.addEventListener("mouseover", (e) => {
+      if (!inspectActive) return;
+      const section = e.target.closest("[data-section-id]");
+      if (section) {
+        if (hoveredEl && hoveredEl !== section) {
+          hoveredEl.style.outline = "";
+          hoveredEl.style.outlineOffset = "";
+          hoveredEl.style.cursor = "";
+        }
+        hoveredEl = section;
+        section.style.outline = "2px dashed #A78BFA";
+        section.style.outlineOffset = "-2px";
+        section.style.cursor = "pointer";
+      }
+    });
+    document.addEventListener("mouseout", (e) => {
+      if (!inspectActive) return;
+      const section = e.target.closest("[data-section-id]");
+      if (section && section === hoveredEl) {
+        section.style.outline = "";
+        section.style.outlineOffset = "";
+        section.style.cursor = "";
+        hoveredEl = null;
+      }
+    });
+    document.addEventListener("click", (e) => {
+      if (!inspectActive) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const section = e.target.closest("[data-section-id]");
+      if (section) {
+        section.style.outline = "";
+        section.style.outlineOffset = "";
+        section.style.cursor = "";
+        hoveredEl = null;
+        const payload = {
+          type: "SECTION_SELECTED",
+          id: section.getAttribute("data-section-id"),
+          html: section.outerHTML,
+          tagName: section.tagName.toLowerCase()
+        };
+        if (typeof window.zorviqSelectSection === "function") {
+          window.zorviqSelectSection(payload);
+        } else {
+          window.parent.postMessage(payload, "*");
+        }
+      }
+    }, true);
+  })();
+</script>
+`;
+    const bodyIndex = code.toLowerCase().lastIndexOf("</body>");
+    if (bodyIndex !== -1) {
+      return code.slice(0, bodyIndex) + script + code.slice(bodyIndex);
+    }
+    const htmlIndex = code.toLowerCase().lastIndexOf("</html>");
+    if (htmlIndex !== -1) {
+      return code.slice(0, htmlIndex) + script + code.slice(htmlIndex);
+    }
+    return code + script;
+  }, [activeCode]);
+
+  const [previewWidth, setPreviewWidth] = useState<number | null>(null);
+  const [isResizing, setIsResizing] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const isResizingRef = useRef(false);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingRef.current = true;
+    setIsResizing(true);
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  };
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (!isResizingRef.current || !containerRef.current) return;
+    const parent = containerRef.current.parentElement;
+    if (!parent) return;
+    const rect = parent.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const halfWidth = Math.abs(e.clientX - centerX);
+    const newWidth = Math.min(rect.width - 48, Math.max(320, halfWidth * 2));
+    setPreviewWidth(newWidth);
+  };
+
+  const handleMouseUp = () => {
+    isResizingRef.current = false;
+    setIsResizing(false);
+    document.removeEventListener("mousemove", handleMouseMove);
+    document.removeEventListener("mouseup", handleMouseUp);
+  };
+
+  useEffect(() => {
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, []);
+
+  const [inspectActive, setInspectActive] = useState(false);
+  const [selectedSection, setSelectedSection] = useState<{
+    id: string;
+    html: string;
+    tagName: string;
+  } | null>(null);
+  const [sectionPrompt, setSectionPrompt] = useState("");
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  const handleIframeLoad = () => {
+    const iframe = iframeRef.current;
+    if (iframe && iframe.contentWindow) {
+      try {
+        (iframe.contentWindow as any).zorviqSelectSection = (data: any) => {
+          setSelectedSection({
+            id: data.id,
+            html: data.html,
+            tagName: data.tagName,
+          });
+          setInspectActive(false);
+        };
+      } catch (err) {
+        console.warn("Could not set direct callback on iframe window", err);
+      }
+      iframe.contentWindow.postMessage({ type: "SET_INSPECT_ACTIVE", active: inspectActive }, "*");
+    }
+  };
+
+  useEffect(() => {
+    const handleMessage = (e: MessageEvent) => {
+      const data = e.data;
+      if (data && data.type === "SECTION_SELECTED") {
+        setSelectedSection({
+          id: data.id,
+          html: data.html,
+          tagName: data.tagName,
+        });
+        setInspectActive(false);
+      }
+    };
+    window.addEventListener("message", handleMessage);
+    return () => {
+      window.removeEventListener("message", handleMessage);
+    };
+  }, []);
+
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (iframe && iframe.contentWindow) {
+      try {
+        (iframe.contentWindow as any).zorviqSelectSection = (data: any) => {
+          setSelectedSection({
+            id: data.id,
+            html: data.html,
+            tagName: data.tagName,
+          });
+          setInspectActive(false);
+        };
+      } catch (err) {
+        console.warn("Could not set direct callback on iframe window in useEffect", err);
+      }
+      iframe.contentWindow.postMessage({ type: "SET_INSPECT_ACTIVE", active: inspectActive }, "*");
+    }
+  }, [inspectActive]);
+
+
   const visibleMessages = useMemo<Message[]>(() => {
     if (messages.length > 0) return messages;
     if (!project) return [];
@@ -143,6 +400,10 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
       }
     }
 
+    activeSectionEditRef.current = null;
+    setActiveSectionEdit(null);
+    setStreamingSectionCode("");
+
     setMessages((prev) => [
       ...prev,
       {
@@ -176,7 +437,11 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
 
       if (payload.type === "token" && payload.data) {
         output += payload.data;
-        setGeneratedCode(output);
+        if (activeSectionEditRef.current) {
+          setStreamingSectionCode(output);
+        } else {
+          setGeneratedCode(output);
+        }
         setWorkingStatus("Streaming generated code");
       }
 
@@ -190,6 +455,9 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
         setError(payload.message ?? "Generation failed");
         setIsWorking(false);
         setWorkingStatus("");
+        activeSectionEditRef.current = null;
+        setActiveSectionEdit(null);
+        setStreamingSectionCode("");
       }
     };
 
@@ -207,6 +475,9 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
         setError(err instanceof Error ? err.message : "Generation failed");
         setIsWorking(false);
         setWorkingStatus("");
+        activeSectionEditRef.current = null;
+        setActiveSectionEdit(null);
+        setStreamingSectionCode("");
       }
     };
   };
@@ -216,6 +487,10 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
     if (!content || isWorking || !projectId) return;
     setInput("");
     setError("");
+
+    activeSectionEditRef.current = null;
+    setActiveSectionEdit(null);
+    setStreamingSectionCode("");
 
     setMessages((prev) => [
       ...prev,
@@ -241,6 +516,62 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
       setError(err instanceof Error ? err.message : "Generation failed");
       setIsWorking(false);
       setWorkingStatus("");
+    }
+  };
+
+  const handleSendSectionEdit = async () => {
+    if (!selectedSection || !sectionPrompt.trim() || isWorking || !projectId) return;
+    const promptText = sectionPrompt.trim();
+    const secId = selectedSection.id;
+    const secHtml = selectedSection.html;
+
+    setSelectedSection(null);
+    setSectionPrompt("");
+    setError("");
+
+    const editCtx = { sectionId: secId, originalCode: activeCode };
+    activeSectionEditRef.current = editCtx;
+    setActiveSectionEdit(editCtx);
+    setStreamingSectionCode("");
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `${Date.now()}-user`,
+        role: "user",
+        content: `[Section Edit: ${secId}] ${promptText}`,
+        time: now(),
+      },
+    ]);
+    setIsWorking(true);
+    setWorkingStatus("Queueing section edit");
+
+    try {
+      const result = await generationService.enqueue(
+        projectId,
+        promptText,
+        true, // isSectionEdit
+        secId,
+        secHtml
+      );
+      if (result.status === "done" && result.code) {
+        await finishGeneration(result.code, result.jobId);
+        return;
+      }
+
+      setWorkingStatus(
+        result.estimatedWaitSeconds
+          ? `Queued section edit. Estimated wait ${result.estimatedWaitSeconds}s`
+          : "Queued section edit. Waiting for code",
+      );
+      streamGeneration(result.jobId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Section edit failed");
+      setIsWorking(false);
+      setWorkingStatus("");
+      activeSectionEditRef.current = null;
+      setActiveSectionEdit(null);
+      setStreamingSectionCode("");
     }
   };
 
@@ -369,36 +700,160 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
           <div className="preview-tabs">
             <button className={`header-btn ${viewMode === "preview" ? "active" : ""}`} onClick={() => setViewMode("preview")}>Watch Preview</button>
             <button className={`header-btn ${viewMode === "code" ? "active" : ""}`} onClick={() => setViewMode("code")}>Watch Code</button>
+            {viewMode === "preview" && (
+              <button
+                className={`header-btn edit-mode-btn ${inspectActive ? "active" : ""}`}
+                onClick={() => setInspectActive(!inspectActive)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  borderColor: inspectActive ? "rgba(167, 139, 250, 0.6)" : "",
+                  background: inspectActive ? "rgba(124, 58, 237, 0.2)" : "",
+                }}
+              >
+                <span className={`inspect-dot ${inspectActive ? "active" : ""}`} />
+                {inspectActive ? "Inspecting" : "Edit Section"}
+              </button>
+            )}
           </div>
+          
+          <div className="responsive-presets">
+            <button 
+              className={`preset-btn ${!previewWidth ? "active" : ""}`} 
+              onClick={() => setPreviewWidth(null)}
+              title="Full width (Desktop)"
+            >
+              Desktop
+            </button>
+            <button 
+              className={`preset-btn ${previewWidth === 768 ? "active" : ""}`} 
+              onClick={() => setPreviewWidth(768)}
+              title="Tablet width (768px)"
+            >
+              Tablet
+            </button>
+            <button 
+              className={`preset-btn ${previewWidth === 375 ? "active" : ""}`} 
+              onClick={() => setPreviewWidth(375)}
+              title="Mobile width (375px)"
+            >
+              Mobile
+            </button>
+          </div>
+
           <div className="chat-header-right">
             <button className="header-btn publish" onClick={downloadCode}>Download HTML</button>
           </div>
         </header>
         <div className="preview-content">
-          {viewMode === "preview" ? (
-            <iframe
-              title="Generated project preview"
-              className="preview-frame"
-              srcDoc={previewHtml}
-              sandbox="allow-forms allow-modals allow-pointer-lock allow-popups allow-scripts"
+          <div
+            ref={containerRef}
+            className={`resizable-container ${isResizing ? "resizing" : ""}`}
+            style={{ width: previewWidth ? `${previewWidth}px` : "100%" }}
+          >
+            {/* Symmetrical Left-Right Drag Handles */}
+            <div 
+              className={`resize-handle left ${isResizing ? "active" : ""}`} 
+              onMouseDown={handleMouseDown}
+              title="Drag to resize"
             />
-          ) : (
-            <div className="code-shell">
-              <button
-                className="copy-code-btn"
-                type="button"
-                onClick={copyCode}
-                disabled={!activeCode.trim()}
-                aria-label="Copy current code"
-                title="Copy current code"
-              >
-                {hasCopiedActiveCode ? <Check size={14} /> : <Copy size={14} />}
-                {hasCopiedActiveCode ? "Copied" : "Copy"}
-              </button>
-              <pre className="code-view">{activeCode || "Generated code will appear here."}</pre>
-            </div>
-          )}
+            <div 
+              className={`resize-handle right ${isResizing ? "active" : ""}`} 
+              onMouseDown={handleMouseDown}
+              title="Drag to resize"
+            />
+
+            {viewMode === "preview" ? (
+              <iframe
+                ref={iframeRef}
+                onLoad={handleIframeLoad}
+                title="Generated project preview"
+                className="preview-frame"
+                srcDoc={previewHtml}
+                sandbox="allow-forms allow-modals allow-pointer-lock allow-popups allow-scripts allow-same-origin"
+                style={{ pointerEvents: isResizing ? "none" : "auto" }}
+              />
+            ) : (
+              <div className="code-shell">
+                <button
+                  className="copy-code-btn"
+                  type="button"
+                  onClick={copyCode}
+                  disabled={!activeCode.trim()}
+                  aria-label="Copy current code"
+                  title="Copy current code"
+                >
+                  {hasCopiedActiveCode ? <Check size={14} /> : <Copy size={14} />}
+                  {hasCopiedActiveCode ? "Copied" : "Copy"}
+                </button>
+                <pre className="code-view">{activeCode || "Generated code will appear here."}</pre>
+              </div>
+            )}
+          </div>
         </div>
+
+        {selectedSection && (
+          <div className="section-prompt-backdrop">
+            <div className="section-prompt-card">
+              <div className="card-header">
+                <h3>Edit Section: <code className="section-badge">{selectedSection.id}</code></h3>
+                <button 
+                  className="close-btn" 
+                  onClick={() => {
+                    setSelectedSection(null);
+                    setSectionPrompt("");
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+              
+              <p className="card-desc">
+                Describe the changes you want to apply specifically to this <code>&lt;{selectedSection.tagName}&gt;</code> section. Zorviq will modify only this part of the page.
+              </p>
+
+              <textarea
+                className="prompt-textarea"
+                placeholder="e.g., Change button background to purple, update text to 'Join Free'..."
+                value={sectionPrompt}
+                onChange={(e) => setSectionPrompt(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendSectionEdit();
+                  }
+                }}
+                rows={3}
+                autoFocus
+              />
+
+              <div className="card-actions">
+                <button 
+                  className="cancel-btn" 
+                  onClick={() => {
+                    setSelectedSection(null);
+                    setSectionPrompt("");
+                  }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  className="primary-btn" 
+                  disabled={!sectionPrompt.trim() || isWorking}
+                  onClick={handleSendSectionEdit}
+                  style={{
+                    padding: "8px 16px",
+                    fontSize: "13px",
+                    fontWeight: 800,
+                  }}
+                >
+                  Generate Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <style jsx>{`
@@ -532,7 +987,90 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
         .preview-panel { flex: 1; display: flex; flex-direction: column; background: #0A0A0E; overflow: hidden; }
         .header-btn.active { background: rgba(124,58,237,0.24); border-color: rgba(167,139,250,0.48); color: #F5F3FF; }
         .header-btn.publish { background: #7C3AED; border-color: rgba(255,255,255,0.14); color: #fff; font-weight: 800; }
-        .preview-content { flex: 1; padding: 20px; min-height: 0; }
+        .preview-content {
+          flex: 1;
+          padding: 20px 24px;
+          min-height: 0;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          position: relative;
+          background: #0A0A0E;
+          overflow: visible;
+        }
+        .resizable-container {
+          position: relative;
+          width: 100%;
+          max-width: 100%;
+          height: 100%;
+          display: flex;
+          flex-direction: column;
+          transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .resizable-container.resizing {
+          transition: none;
+        }
+        .resize-handle {
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          width: 12px;
+          cursor: ew-resize;
+          z-index: 100;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .resize-handle::after {
+          content: "";
+          width: 4px;
+          height: 32px;
+          background: rgba(255, 255, 255, 0.15);
+          border-radius: 2px;
+          transition: background 0.2s, transform 0.2s;
+        }
+        .resize-handle:hover::after,
+        .resize-handle.active::after {
+          background: #A78BFA;
+          transform: scaleX(1.5);
+          box-shadow: 0 0 8px rgba(167, 139, 250, 0.6);
+        }
+        .resize-handle.left {
+          left: -16px;
+        }
+        .resize-handle.right {
+          right: -16px;
+        }
+        .responsive-presets {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          background: rgba(255, 255, 255, 0.04);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 8px;
+          padding: 3px;
+        }
+        .preset-btn {
+          min-height: 28px;
+          padding: 4px 10px;
+          border-radius: 6px;
+          border: none;
+          background: transparent;
+          color: #9ca3af;
+          font-size: 12px;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+        .preset-btn:hover {
+          color: #fff;
+          background: rgba(255, 255, 255, 0.06);
+        }
+        .preset-btn.active {
+          background: rgba(124, 58, 237, 0.24);
+          border: 1px solid rgba(167, 139, 250, 0.3);
+          color: #fff;
+        }
         .preview-frame { width: 100%; height: 100%; border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; background: #fff; box-shadow: 0 18px 60px rgba(0,0,0,0.28); }
         .code-shell { position: relative; width: 100%; height: 100%; min-height: 0; }
         .copy-code-btn {
@@ -563,6 +1101,113 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
         textarea:focus-visible {
           outline: 3px solid rgba(167,139,250,0.42);
           outline-offset: 2px;
+        }
+        
+        /* Inspect / edit section styles */
+        .inspect-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: #ef4444;
+          display: inline-block;
+          transition: background 0.3s;
+        }
+        .inspect-dot.active {
+          background: #10b981;
+          box-shadow: 0 0 8px #10b981;
+          animation: blink-dot 1.2s step-end infinite;
+        }
+        @keyframes blink-dot {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.3; }
+        }
+        
+        .section-prompt-backdrop {
+          position: absolute;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.65);
+          backdrop-filter: blur(6px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+          padding: 24px;
+        }
+        
+        .section-prompt-card {
+          width: 100%;
+          max-width: 460px;
+          background: #101014;
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          border-radius: 14px;
+          padding: 24px;
+          box-shadow: 0 24px 64px rgba(0, 0, 0, 0.7);
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }
+        
+        .section-badge {
+          background: rgba(124, 58, 237, 0.2);
+          border: 1px solid rgba(167, 139, 250, 0.3);
+          color: #C4B5FD;
+          padding: 2px 6px;
+          border-radius: 4px;
+          font-size: 13px;
+          font-family: monospace;
+        }
+        
+        .card-desc {
+          font-size: 13px;
+          color: #a1a1aa;
+          line-height: 1.5;
+          margin: 0;
+        }
+        
+        .card-desc code {
+          color: #c4b5fd;
+        }
+        
+        .prompt-textarea {
+          width: 100%;
+          background: rgba(0, 0, 0, 0.3);
+          border: 1px solid rgba(255, 255, 255, 0.15);
+          border-radius: 8px;
+          padding: 12px;
+          color: #fff;
+          font-size: 14px;
+          resize: none;
+          outline: none;
+          font-family: inherit;
+        }
+        
+        .prompt-textarea:focus {
+          border-color: #a78bfa;
+          box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.2);
+        }
+        
+        .card-actions {
+          display: flex;
+          justify-content: flex-end;
+          gap: 10px;
+          margin-top: 4px;
+        }
+        
+        .cancel-btn {
+          min-height: 36px;
+          padding: 8px 16px;
+          border: 1px solid rgba(255, 255, 255, 0.15);
+          background: rgba(255, 255, 255, 0.05);
+          border-radius: 8px;
+          color: #fff;
+          cursor: pointer;
+          font-size: 13px;
+          font-weight: 600;
+          transition: background 0.2s;
+        }
+        
+        .cancel-btn:hover {
+          background: rgba(255, 255, 255, 0.1);
         }
         @media (max-width: 900px) {
           .chat-root { flex-direction: column; }

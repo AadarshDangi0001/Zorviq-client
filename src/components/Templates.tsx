@@ -1,8 +1,10 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { authStore } from "@/lib/api";
+import { useCurrentUser } from "@/react-query-config/queries/use-auth-queries";
 
 
 
@@ -19,6 +21,12 @@ const TEMPLATES = [
 /* ── Section ───────────────────────────────────────── */
 export default function Templates() {
   const [hovered, setHovered] = useState<string | null>(null);
+  const { data: user } = useCurrentUser();
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    setIsLoggedIn(Boolean(user || (typeof window !== "undefined" && authStore.get())));
+  }, [user]);
 
   return (
     <section
@@ -151,7 +159,7 @@ export default function Templates() {
                   }}>
                     {on && (
                       <Link
-                        href="/signup"
+                        href={isLoggedIn ? "/dashboard" : "/signup"}
                         style={{
                           display: "inline-flex", alignItems: "center", gap: 6,
                           background: "#fff",
@@ -205,7 +213,7 @@ export default function Templates() {
         </div>
 
         <div style={{ display: "flex", justifyContent: "center", marginTop: 40 }}>
-          <Link href="/signup" style={{
+          <Link href={isLoggedIn ? "/dashboard" : "/signup"} style={{
             background: "rgba(255,255,255,0.05)",
             border: "1px solid rgba(255,255,255,0.1)",
             color: "#FFFFFF",
