@@ -29,7 +29,7 @@ import {
 } from "@/react-query-config/mutations/use-project-mutations";
 import { useCurrentUser } from "@/react-query-config/queries/use-auth-queries";
 import { useProjects } from "@/react-query-config/queries/use-project-queries";
-import { ZorviqLoadingBar } from "@/shared/components/zorviq-loading-bar";
+import Loader from "@/components/Loader";
 
 const relativeTime = (date?: string) => {
   if (!date) return "recently";
@@ -246,11 +246,9 @@ export default function DashboardPage() {
 
   if (isLoading) {
     return (
-      <ZorviqLoadingBar
-        variant="page"
-        label="Loading dashboard"
-        detail="Fetching your projects and workspace"
-      />
+      <div style={{ height: '100vh', width: '100vw', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#060608' }}>
+        <Loader />
+      </div>
     );
   }
 

@@ -7,7 +7,7 @@ import { authStore } from "@/lib/api";
 import { useUpdateProject } from "@/react-query-config/mutations/use-project-mutations";
 import { useProject } from "@/react-query-config/queries/use-project-queries";
 import { generationService } from "@/services/generation.service";
-import { ZorviqLoadingBar } from "@/shared/components/zorviq-loading-bar";
+import Loader from "@/components/Loader";
 
 interface Message {
   id: string;
@@ -44,11 +44,9 @@ export default function ChatPage() {
   return (
     <Suspense
       fallback={
-        <ZorviqLoadingBar
-          variant="page"
-          label="Loading chat"
-          detail="Opening your AI website editor"
-        />
+        <div style={{ height: '100vh', width: '100vw', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#060608' }}>
+          <Loader />
+        </div>
       }
     >
       <ChatRoute />
@@ -82,12 +80,113 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
   const [viewMode, setViewMode] = useState<ViewMode>("preview");
   const [error, setError] = useState("");
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [isSelectingComponent, setIsSelectingComponent] = useState(false);
+  const [targetedComponent, setTargetedComponent] = useState<{tag: string, text: string, selector: string, html: string} | null>(null);
+
+  const toggleSelectionMode = () => {
+    setIsSelectingComponent((prev) => {
+      const next = !prev;
+      const iframe = document.querySelector("iframe");
+      if (iframe?.contentWindow) {
+        iframe.contentWindow.postMessage({ type: "TOGGLE_SELECTION_MODE", value: next }, "*");
+      }
+      return next;
+    });
+  };
 
   const projectId = project?._id;
   const storedCode = project?.currentCode ?? "";
   const activeCode = generatedCode || storedCode;
   const hasCopiedActiveCode = Boolean(activeCode) && copiedCode === activeCode;
-  const previewHtml = useMemo(() => activeCode || defaultCode, [activeCode]);
+  const previewHtml = useMemo(() => {
+    const base = activeCode || defaultCode;
+    if (!base.includes('</body>')) return base;
+    const injection = `
+    <script>
+      let isSelecting = false;
+      let hoveredEl = null;
+      let oldOutline = '';
+
+      window.addEventListener('message', (e) => {
+        if (e.data?.type === 'TOGGLE_SELECTION_MODE') {
+          isSelecting = e.data.value;
+          document.body.style.cursor = isSelecting ? 'crosshair' : 'default';
+          if (!isSelecting && hoveredEl) {
+            hoveredEl.style.outline = oldOutline;
+            hoveredEl = null;
+          }
+        }
+      });
+
+      document.addEventListener('mouseover', (e) => {
+        if (!isSelecting) return;
+        e.stopPropagation();
+        oldOutline = e.target.style.outline;
+        hoveredEl = e.target;
+        e.target.style.outline = '2px solid #7C3AED';
+        e.target.style.outlineOffset = '-2px';
+        e.target.style.cursor = 'crosshair';
+      }, true);
+
+      document.addEventListener('mouseout', (e) => {
+        if (!isSelecting) return;
+        e.stopPropagation();
+        if (hoveredEl === e.target) {
+          e.target.style.outline = oldOutline || '';
+          hoveredEl = null;
+        }
+      }, true);
+
+      document.addEventListener('click', (e) => {
+        if (!isSelecting) {
+          const anchor = e.target.closest('a');
+          if (anchor && anchor.href) e.preventDefault();
+          const btn = e.target.closest('button');
+          if (btn) e.preventDefault();
+          return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (hoveredEl) {
+          hoveredEl.style.outline = oldOutline || '';
+          hoveredEl = null;
+        }
+
+        const path = getElementSelector(e.target);
+        const text = (e.target.innerText || '').substring(0, 30).trim();
+        const tag = e.target.tagName.toLowerCase();
+        const html = e.target.outerHTML;
+
+        window.parent.postMessage({ type: 'ELEMENT_CLICKED', selector: path, text, tag, html }, '*');
+      }, true);
+
+      function getElementSelector(el) {
+         if (el.id) return '#' + el.id;
+         if (el.tagName === 'BODY') return 'body';
+         let path = [];
+         while (el.nodeType === Node.ELEMENT_NODE) {
+           let selector = el.nodeName.toLowerCase();
+           if (el.id) {
+             selector += '#' + el.id;
+             path.unshift(selector);
+             break;
+           } else {
+             let sib = el, nth = 1;
+             while (sib = sib.previousElementSibling) {
+               if (sib.nodeName.toLowerCase() === selector) nth++;
+             }
+             if (nth !== 1) selector += ":nth-of-type("+nth+")";
+           }
+           path.unshift(selector);
+           el = el.parentNode;
+         }
+         return path.join(" > ");
+      }
+    </script>
+    `;
+    return base.replace('</body>', injection + '</body>');
+  }, [activeCode]);
   const visibleMessages = useMemo<Message[]>(() => {
     if (messages.length > 0) return messages;
     if (!project) return [];
@@ -124,6 +223,18 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [visibleMessages, isWorking]);
+
+  useEffect(() => {
+    const handleMessage = (e: MessageEvent) => {
+      if (e.data?.type === "ELEMENT_CLICKED") {
+        const { tag, text, selector, html } = e.data;
+        setTargetedComponent({ tag, text, selector, html });
+        setIsSelectingComponent(false);
+      }
+    };
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, []);
 
   const finishGeneration = async (code: string, jobId: string) => {
     let finalCode = code;
@@ -212,20 +323,32 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
   };
 
   const handleSend = async (text?: string) => {
-    const content = (text ?? input).trim();
-    if (!content || isWorking || !projectId) return;
+    const rawInput = (text ?? input).trim();
+    if (!rawInput || isWorking || !projectId) return;
+
+    let displayContent = rawInput;
+    let backendPrompt = rawInput;
+    let opts = {};
+
+    if (targetedComponent) {
+      displayContent = `[Target: <${targetedComponent.tag}>] ${rawInput}`;
+      backendPrompt = `Please modify the element matching the CSS selector: \`${targetedComponent.selector}\` (${targetedComponent.tag}).\n\nInstruction: ${rawInput}\n\nCRITICAL: You must return the ENTIRE updated HTML document, including all unmodified parts. Do not just return the modified element.`;
+      opts = {};
+      setTargetedComponent(null);
+    }
+
     setInput("");
     setError("");
 
     setMessages((prev) => [
       ...prev,
-      { id: `${Date.now()}-user`, role: "user", content, time: now() },
+      { id: `${Date.now()}-user`, role: "user", content: displayContent, time: now() },
     ]);
     setIsWorking(true);
     setWorkingStatus("Queueing generation");
 
     try {
-      const result = await generationService.enqueue(projectId, content);
+      const result = await generationService.enqueue(projectId, backendPrompt, opts);
       if (result.status === "done" && result.code) {
         await finishGeneration(result.code, result.jobId);
         return;
@@ -286,11 +409,9 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
 
   if (isProjectLoading) {
     return (
-      <ZorviqLoadingBar
-        variant="page"
-        label="Loading project"
-        detail="Preparing the latest generated website"
-      />
+      <div style={{ height: '100vh', width: '100vw', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#060608' }}>
+        <Loader />
+      </div>
     );
   }
 
@@ -331,6 +452,14 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
 
         <div className="input-area">
           <div className="input-card">
+            {targetedComponent && (
+              <div className="targeted-badge">
+                <span className="targeted-text">
+                  Targeting: <strong>&lt;{targetedComponent.tag}&gt;</strong> {targetedComponent.text ? `"${targetedComponent.text}"` : ""}
+                </span>
+                <button className="clear-target-btn" onClick={() => setTargetedComponent(null)}>✕</button>
+              </div>
+            )}
             <textarea
               className="chat-input"
               placeholder="Generate or edit this website..."
@@ -346,6 +475,9 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
             />
             <div className="input-actions">
               <div className="input-left">
+                <button className={`visual-btn ${isSelectingComponent ? "active" : ""}`} onClick={toggleSelectionMode}>
+                  {isSelectingComponent ? "Selecting..." : "Select Component"}
+                </button>
                 <button className="visual-btn" onClick={() => setInput("Improve the visual design and spacing")}>Visual edits</button>
               </div>
               <div className="input-right">
@@ -559,6 +691,37 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
         .copy-code-btn:hover { background: rgba(124,58,237,0.22); border-color: rgba(167,139,250,0.46); color: #fff; }
         .copy-code-btn:disabled { cursor: default; opacity: 0.52; }
         .code-view { width: 100%; height: 100%; overflow: auto; border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; background: #050505; color: #f1f1f4; padding: 58px 20px 20px; font: 13px/1.7 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: pre-wrap; }
+        .targeted-badge {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          background: rgba(124,58,237,0.15);
+          border: 1px solid rgba(167,139,250,0.3);
+          border-radius: 8px;
+          padding: 8px 12px;
+          margin-bottom: 12px;
+        }
+        .targeted-text {
+          font-size: 13px;
+          color: #e2d4fd;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .targeted-text strong {
+          color: #fff;
+        }
+        .clear-target-btn {
+          background: none;
+          border: none;
+          color: #a78bfa;
+          cursor: pointer;
+          font-size: 14px;
+          padding: 0 4px;
+        }
+        .clear-target-btn:hover {
+          color: #fff;
+        }
         button:focus-visible,
         textarea:focus-visible {
           outline: 3px solid rgba(167,139,250,0.42);

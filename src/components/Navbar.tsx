@@ -243,16 +243,10 @@ const navItems: NavItem[] = [
 
 function NavLinkItem({ item }: { item: NavItem }) {
   const [open, setOpen] = useState(false);
-  const [dropTop, setDropTop] = useState(0);
-  const buttonRef = useRef<HTMLButtonElement>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleMouseEnter = () => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    if (buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      setDropTop(rect.bottom + 10);
-    }
     setOpen(true);
   };
 
@@ -284,11 +278,9 @@ function NavLinkItem({ item }: { item: NavItem }) {
     <div
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      style={{ position: "relative" }}
     >
       {/* Trigger button */}
       <button
-        ref={buttonRef}
         style={{
           background: "none",
           border: "none",
@@ -315,12 +307,13 @@ function NavLinkItem({ item }: { item: NavItem }) {
         />
       </button>
 
-      {/* Dropdown — fixed to viewport, centered on full page width */}
+      {/* Dropdown — absolute to the containing header pill */}
       <div
         style={{
-          position: "fixed",
-          top: `${dropTop}px`,
-          left: "50vw",
+          position: "absolute",
+          top: "100%",
+          left: "50%",
+          marginTop: "10px",
           background: "#060606",
           backdropFilter: "blur(24px)",
           WebkitBackdropFilter: "blur(24px)",
@@ -375,6 +368,7 @@ export default function Navbar() {
     >
       <div
         style={{
+          position: "relative",
           width: scrolled ? "fit-content" : "100%",
           maxWidth: scrolled ? "960px" : "100%",
           pointerEvents: "auto",

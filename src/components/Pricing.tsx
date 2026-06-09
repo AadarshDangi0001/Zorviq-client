@@ -50,7 +50,7 @@ export default function Pricing() {
   const [yearly, setYearly] = useState(false);
 
   return (
-    <section id="pricing" style={{ padding: "96px 24px", position: "relative", background: "#060608" }}>
+    <section id="pricing" style={{ padding: "96px 24px", position: "relative" }}>
       <div style={{ maxWidth: 1180, margin: "0 auto" }}>
         <div className="pricing-header">
           <div>
