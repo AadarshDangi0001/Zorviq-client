@@ -53,11 +53,11 @@ export default function LoginPage() {
 
         <Button
           type="submit"
-          isLoading={login.isPending}
-          disabled={!email || !password}
+          isLoading={login.isPending || login.isSuccess}
+          disabled={!email || !password || login.isSuccess}
           style={{ width: "100%" }}
         >
-          {login.isPending ? "Signing in..." : "Sign In"}
+          {login.isPending || login.isSuccess ? "Signing in..." : "Sign In"}
         </Button>
       </form>
 

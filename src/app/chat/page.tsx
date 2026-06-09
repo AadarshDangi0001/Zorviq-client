@@ -80,19 +80,6 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
   const [viewMode, setViewMode] = useState<ViewMode>("preview");
   const [error, setError] = useState("");
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
-  const [isSelectingComponent, setIsSelectingComponent] = useState(false);
-  const [targetedComponent, setTargetedComponent] = useState<{tag: string, text: string, selector: string, html: string} | null>(null);
-
-  const toggleSelectionMode = () => {
-    setIsSelectingComponent((prev) => {
-      const next = !prev;
-      const iframe = document.querySelector("iframe");
-      if (iframe?.contentWindow) {
-        iframe.contentWindow.postMessage({ type: "TOGGLE_SELECTION_MODE", value: next }, "*");
-      }
-      return next;
-    });
-  };
 
   const [activeSectionEdit, setActiveSectionEdit] = useState<{
     sectionId: string;
@@ -177,22 +164,10 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
     const script = `
     <script>
       (function() {
-        let isSelecting = false;
-        let selectHoveredEl = null;
-        let selectOldOutline = '';
-
         let inspectActive = false;
         let inspectHoveredEl = null;
 
         window.addEventListener('message', (e) => {
-          if (e.data?.type === 'TOGGLE_SELECTION_MODE') {
-            isSelecting = e.data.value;
-            document.body.style.cursor = isSelecting ? 'crosshair' : 'default';
-            if (!isSelecting && selectHoveredEl) {
-              selectHoveredEl.style.outline = selectOldOutline;
-              selectHoveredEl = null;
-            }
-          }
           if (e.data?.type === 'SET_INSPECT_ACTIVE') {
             inspectActive = e.data.active;
             if (!inspectActive && inspectHoveredEl) {
@@ -205,15 +180,6 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
         });
 
         document.addEventListener('mouseover', (e) => {
-          if (isSelecting) {
-            e.stopPropagation();
-            selectOldOutline = e.target.style.outline;
-            selectHoveredEl = e.target;
-            e.target.style.outline = '2px solid #7C3AED';
-            e.target.style.outlineOffset = '-2px';
-            e.target.style.cursor = 'crosshair';
-            return;
-          }
           if (inspectActive) {
             const section = e.target.closest("[data-section-id]");
             if (section) {
@@ -231,14 +197,6 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
         }, true);
 
         document.addEventListener('mouseout', (e) => {
-          if (isSelecting) {
-            e.stopPropagation();
-            if (selectHoveredEl === e.target) {
-              e.target.style.outline = selectOldOutline || '';
-              selectHoveredEl = null;
-            }
-            return;
-          }
           if (inspectActive) {
             const section = e.target.closest("[data-section-id]");
             if (section && section === inspectHoveredEl) {
@@ -251,28 +209,6 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
         }, true);
 
         document.addEventListener('click', (e) => {
-          if (isSelecting) {
-            const anchor = e.target.closest('a');
-            if (anchor && anchor.href) e.preventDefault();
-            const btn = e.target.closest('button');
-            if (btn) e.preventDefault();
-
-            e.preventDefault();
-            e.stopPropagation();
-
-            if (selectHoveredEl) {
-              selectHoveredEl.style.outline = selectOldOutline || '';
-              selectHoveredEl = null;
-            }
-
-            const path = getElementSelector(e.target);
-            const text = (e.target.innerText || '').substring(0, 30).trim();
-            const tag = e.target.tagName.toLowerCase();
-            const html = e.target.outerHTML;
-
-            window.parent.postMessage({ type: 'ELEMENT_CLICKED', selector: path, text, tag, html }, '*');
-            return;
-          }
           if (inspectActive) {
             e.preventDefault();
             e.stopPropagation();
@@ -294,31 +230,17 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
                 window.parent.postMessage(payload, "*");
               }
             }
+          } else {
+            const anchor = e.target.closest('a');
+            if (anchor && anchor.href) e.preventDefault();
+            const btn = e.target.closest('button');
+            if (btn) e.preventDefault();
           }
         }, true);
-
-        function getElementSelector(el) {
-           if (el.id) return '#' + el.id;
-           if (el.tagName === 'BODY') return 'body';
-           let path = [];
-           while (el.nodeType === Node.ELEMENT_NODE) {
-             let selector = el.nodeName.toLowerCase();
-             if (el.id) {
-               selector += '#' + el.id;
-               path.unshift(selector);
-               break;
-             } else {
-               let sib = el, nth = 1;
-               while (sib = sib.previousElementSibling) {
-                 if (sib.nodeName.toLowerCase() === selector) nth++;
-               }
-               if (nth !== 1) selector += ":nth-of-type("+nth+")";
-             }
-             path.unshift(selector);
-             el = el.parentNode;
-           }
-           return path.join(" > ");
-        }
+        
+        document.addEventListener('submit', (e) => {
+          e.preventDefault();
+        }, true);
       })();
     </script>
     `;
@@ -473,18 +395,6 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [visibleMessages, isWorking]);
 
-  useEffect(() => {
-    const handleMessage = (e: MessageEvent) => {
-      if (e.data?.type === "ELEMENT_CLICKED") {
-        const { tag, text, selector, html } = e.data;
-        setTargetedComponent({ tag, text, selector, html });
-        setIsSelectingComponent(false);
-      }
-    };
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
-  }, []);
-
   const finishGeneration = async (code: string, jobId: string) => {
     let finalCode = code;
 
@@ -592,13 +502,6 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
     let displayContent = rawInput;
     let backendPrompt = rawInput;
     let opts = {};
-
-    if (targetedComponent) {
-      displayContent = `[Target: <${targetedComponent.tag}>] ${rawInput}`;
-      backendPrompt = `Please modify the element matching the CSS selector: \`${targetedComponent.selector}\` (${targetedComponent.tag}).\n\nInstruction: ${rawInput}\n\nCRITICAL: You must return the ENTIRE updated HTML document, including all unmodified parts. Do not just return the modified element.`;
-      opts = {};
-      setTargetedComponent(null);
-    }
 
     setInput("");
     setError("");
@@ -777,14 +680,6 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
 
         <div className="input-area">
           <div className="input-card">
-            {targetedComponent && (
-              <div className="targeted-badge">
-                <span className="targeted-text">
-                  Targeting: <strong>&lt;{targetedComponent.tag}&gt;</strong> {targetedComponent.text ? `"${targetedComponent.text}"` : ""}
-                </span>
-                <button className="clear-target-btn" onClick={() => setTargetedComponent(null)}>✕</button>
-              </div>
-            )}
             <textarea
               className="chat-input"
               placeholder="Generate or edit this website..."
@@ -800,9 +695,6 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
             />
             <div className="input-actions">
               <div className="input-left">
-                <button className={`visual-btn ${isSelectingComponent ? "active" : ""}`} onClick={toggleSelectionMode}>
-                  {isSelectingComponent ? "Selecting..." : "Select Component"}
-                </button>
                 <button className="visual-btn" onClick={() => setInput("Improve the visual design and spacing")}>Visual edits</button>
               </div>
               <div className="input-right">
@@ -1223,37 +1115,6 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
         .copy-code-btn:hover { background: rgba(124,58,237,0.22); border-color: rgba(167,139,250,0.46); color: #fff; }
         .copy-code-btn:disabled { cursor: default; opacity: 0.52; }
         .code-view { width: 100%; height: 100%; overflow: auto; border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; background: #050505; color: #f1f1f4; padding: 58px 20px 20px; font: 13px/1.7 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: pre-wrap; }
-        .targeted-badge {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          background: rgba(124,58,237,0.15);
-          border: 1px solid rgba(167,139,250,0.3);
-          border-radius: 8px;
-          padding: 8px 12px;
-          margin-bottom: 12px;
-        }
-        .targeted-text {
-          font-size: 13px;
-          color: #e2d4fd;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-        .targeted-text strong {
-          color: #fff;
-        }
-        .clear-target-btn {
-          background: none;
-          border: none;
-          color: #a78bfa;
-          cursor: pointer;
-          font-size: 14px;
-          padding: 0 4px;
-        }
-        .clear-target-btn:hover {
-          color: #fff;
-        }
         button:focus-visible,
         textarea:focus-visible {
           outline: 3px solid rgba(167,139,250,0.42);
