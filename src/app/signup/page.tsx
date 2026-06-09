@@ -77,11 +77,11 @@ export default function SignUpPage() {
 
         <Button
           type="submit"
-          isLoading={register.isPending}
-          disabled={!fullname || !email || password.length < 6}
+          isLoading={register.isPending || register.isSuccess}
+          disabled={!fullname || !email || password.length < 6 || register.isSuccess}
           style={{ width: "100%", marginTop: 8 }}
         >
-          {register.isPending ? "Creating account..." : "Create Account"}
+          {register.isPending || register.isSuccess ? "Creating account..." : "Create Account"}
         </Button>
       </form>
 
