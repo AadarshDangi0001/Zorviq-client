@@ -58,7 +58,7 @@ export default function Pricing() {
   }, [user]);
 
   return (
-    <section id="pricing" style={{ padding: "96px 24px", position: "relative" }}>
+    <section id="pricing" style={{ padding: "96px 24px", position: "relative", background: "#060608" }}>
       <div style={{ maxWidth: 1180, margin: "0 auto" }}>
         <div className="pricing-header">
           <div>

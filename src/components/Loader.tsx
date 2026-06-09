@@ -1,52 +1,22 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
-export default function Loader({ actualProgress = 100 }: { actualProgress?: number }) {
+export default function Loader() {
   const loaderRef = useRef<HTMLDivElement>(null);
-  const [displayedProgress, setDisplayedProgress] = useState(0);
-
   useEffect(() => {
-    const interval = setInterval(() => {
-      setDisplayedProgress((prev) => {
-        const next = prev + 1.25;
-        if (next > actualProgress) {
-          return prev;
-        }
-        if (next >= 100) {
-          clearInterval(interval);
-          return 100;
-        }
-        return next;
-      });
-    }, 30);
-    return () => clearInterval(interval);
-  }, [actualProgress]);
-
-  useEffect(() => {
-    if (displayedProgress >= 100) {
+    const t = setTimeout(() => {
       if (loaderRef.current) {
         loaderRef.current.classList.add("loader-exit");
         setTimeout(() => {
           if (loaderRef.current) loaderRef.current.style.display = "none";
         }, 750);
       }
-    }
-  }, [displayedProgress]);
-
-  const waterLevel = 100 - displayedProgress;
-  const wave1 = displayedProgress > 5 && displayedProgress < 95 ? 5 : 0;
-  const wave2 = displayedProgress > 5 && displayedProgress < 95 ? -3 : 0;
-  const clipPath = `polygon(0% ${waterLevel}%, 15% ${waterLevel + wave2}%, 30% ${waterLevel + wave1}%, 45% ${waterLevel + wave2}%, 60% ${waterLevel + wave1}%, 75% ${waterLevel + wave2}%, 100% ${waterLevel}%, 100% 100%, 0% 100%)`;
+    }, 3800);
+    return () => clearTimeout(t);
+  }, []);
 
   return (
     <div id="zorviq-loader" ref={loaderRef}>
-      <style>{`
-        #zorviq-loader .loader-text::before {
-          animation: none !important;
-          clip-path: ${clipPath} !important;
-          transition: clip-path 0.05s linear;
-        }
-      `}</style>
       <div className="loader-main">
         <h1 className="loader-text loader-left" data-text="ZOR">ZOR</h1>
         <div className="loader-logo-wrap">

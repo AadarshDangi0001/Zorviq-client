@@ -1,7 +1,13 @@
 import { API_BASE_URL, apiClient } from "@/lib/http/axios";
 
 export const generationService = {
-  enqueue(projectId: string, prompt: string, opts?: { isSectionEdit?: boolean; sectionId?: string | null; sectionHtml?: string | null }) {
+  enqueue(
+    projectId: string,
+    prompt: string,
+    isSectionEdit = false,
+    sectionId: string | null = null,
+    sectionHtml: string | null = null
+  ) {
     return apiClient.post<{
       jobId: string;
       status: "queued" | "done";
@@ -9,7 +15,7 @@ export const generationService = {
       code?: string;
       queuePosition?: number;
       estimatedWaitSeconds?: number;
-    }>("/api/generate", { projectId, prompt, ...opts });
+    }>("/api/generate", { projectId, prompt, isSectionEdit, sectionId, sectionHtml });
   },
   status(jobId: string) {
     return apiClient.get<{ status: string; output?: string | null }>(

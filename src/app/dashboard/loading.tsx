@@ -1,9 +1,13 @@
-import Loader from "@/components/Loader";
+import { ZorviqLoadingBar } from "@/shared/components/zorviq-loading-bar";
 
 export default function DashboardLoading() {
   return (
-    <main style={{ height: '100vh', width: '100vw', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#060608' }}>
-      <Loader />
+    <main>
+      <ZorviqLoadingBar
+        variant="page"
+        label="Loading dashboard"
+        detail="Fetching your projects and workspace"
+      />
     </main>
   );
 }
