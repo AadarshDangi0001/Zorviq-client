@@ -173,7 +173,6 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
 
   const hasCopiedActiveCode = Boolean(activeCode) && copiedCode === activeCode;
   const previewHtml = useMemo(() => {
-  const previewHtml = useMemo(() => {
     const base = activeCode || defaultCode;
     const script = `
     <script>
