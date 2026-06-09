@@ -1,13 +1,9 @@
-import { ZorviqLoadingBar } from "@/shared/components/zorviq-loading-bar";
+import Loader from "@/components/Loader";
 
 export default function ChatLoading() {
   return (
-    <main>
-      <ZorviqLoadingBar
-        variant="page"
-        label="Loading chat"
-        detail="Opening your AI website editor"
-      />
+    <main style={{ height: '100vh', width: '100vw', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#060608' }}>
+      <Loader />
     </main>
   );
 }

@@ -12,18 +12,13 @@ function AIBuildDemo() {
 
       {/* Browser */}
       <motion.div
-        initial={{ scale: 0.92, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{
-          duration: 1,
-          repeat: Infinity,
-          repeatDelay: 2
-        }}
+        animate={{ opacity: [0, 1, 1, 1, 0], scale: [0.95, 1, 1, 1, 0.95] }}
+        transition={{ duration: 8, repeat: Infinity, times: [0, 0.05, 0.9, 0.95, 1] }}
         className="absolute inset-6 rounded-2xl border border-white/10 bg-[#0d0d0d] overflow-hidden"
       >
 
         {/* Browser Header */}
-        <div className="h-10 border-b border-white/10 flex items-center px-4 gap-2">
+        <div className="h-10 border-b border-white/10 flex items-center px-4 gap-2 relative z-20 bg-[#0d0d0d]">
           <div className="w-3 h-3 rounded-full bg-red-400" />
           <div className="w-3 h-3 rounded-full bg-yellow-400" />
           <div className="w-3 h-3 rounded-full bg-green-400" />
@@ -33,177 +28,161 @@ function AIBuildDemo() {
           </div>
         </div>
 
-        {/* Prompt */}
+        {/* Prompt & Progress Wrapper - Fades out to make room for full dashboard */}
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{
-            duration: 1,
-            repeat: Infinity,
-            repeatDelay: 2
-          }}
-          className="mx-6 mt-6 rounded-xl border border-violet-500/20 bg-black/60 p-4"
+          animate={{ opacity: [1, 1, 0, 0, 1], scale: [1, 1, 0.95, 0.95, 1] }}
+          transition={{ duration: 8, repeat: Infinity, times: [0, 0.35, 0.4, 0.95, 1] }}
+          className="relative z-10"
         >
-          <div className="text-xs text-violet-300 mb-2">
-            Prompt
-          </div>
+          {/* Prompt */}
+          <motion.div
+            animate={{ opacity: [0, 0, 1, 1, 0], y: [10, 10, 0, 0, 10] }}
+            transition={{ duration: 8, repeat: Infinity, times: [0, 0.05, 0.1, 0.95, 1] }}
+            className="mx-6 mt-6 rounded-xl border border-violet-500/20 bg-black/60"
+            style={{ padding: "16px" }}
+          >
+            <div className="text-xs text-violet-300 mb-2">Prompt</div>
+            <div className="text-white/80 text-sm">Build a fintech dashboard with stock analytics</div>
+          </motion.div>
 
-          <div className="text-white/80 text-sm">
-            Build a fintech dashboard with stock analytics
+          {/* Progress */}
+          <div className="px-6 mt-4">
+            <div className="space-y-2">
+              {["Generating Layout", "Creating Components", "Writing Content", "Applying Theme"].map((item, i) => {
+                const start = 0.12 + i * 0.05;
+                return (
+                  <motion.div
+                    key={item}
+                    animate={{ opacity: [0, 0, 1, 1, 0], x: [-10, -10, 0, 0, -10] }}
+                    transition={{ duration: 8, repeat: Infinity, times: [0, start, start + 0.05, 0.95, 1] }}
+                    className="flex items-center gap-3"
+                  >
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+                    <span className="text-white/80 text-[11px] font-medium tracking-wide">{item}</span>
+                  </motion.div>
+                );
+              })}
+            </div>
           </div>
         </motion.div>
 
-        {/* Progress */}
-        <div className="px-6 mt-5">
-          <div className="space-y-3">
-
-            {[
-              "Generating Layout",
-              "Creating Components",
-              "Writing Content",
-              "Applying Theme"
-            ].map((item, i) => (
-              <motion.div
-                key={item}
-                initial={{ opacity: 0 }}
-                animate={{
-                  opacity: [0, 1, 1]
-                }}
-                transition={{
-                  duration: 1,
-                  delay: i * 0.5,
-                  repeat: Infinity,
-                  repeatDelay: 2
-                }}
-                className="flex items-center gap-3"
-              >
-                <div className="w-2 h-2 rounded-full bg-green-400" />
-
-                <span className="text-white/70 text-xs">
-                  {item}
-                </span>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-
         {/* Generated UI */}
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{
-            opacity: [0, 0, 1, 1]
-          }}
-          transition={{
-            duration: 8,
-            repeat: Infinity
-          }}
-          className="px-6 mt-8"
+          animate={{ y: [0, 0, 0, -170, -170, 0], scale: [1, 1, 1, 1.05, 1.05, 1] }}
+          transition={{ duration: 8, repeat: Infinity, times: [0, 0.25, 0.4, 0.5, 0.95, 1], ease: "easeInOut" }}
+          className="px-5 mt-4 flex flex-col gap-3 relative z-10"
         >
-
-          {/* Hero */}
+          {/* Balance/Header */}
           <motion.div
-            initial={{ y: 20 }}
-            animate={{ y: 0 }}
-            transition={{
-              delay: 2,
-              duration: 0.8,
-              repeat: Infinity,
-              repeatDelay: 4
-            }}
-            className="h-28 rounded-2xl bg-gradient-to-r from-violet-500 to-fuchsia-500"
-          />
+            animate={{ y: [15, 15, 0, 0, 15], opacity: [0, 0, 1, 1, 0] }}
+            transition={{ duration: 8, repeat: Infinity, times: [0, 0.25, 0.35, 0.9, 1] }}
+            className="relative rounded-xl bg-gradient-to-br from-white/10 to-white/5 border border-white/10 overflow-hidden shadow-lg"
+            style={{ padding: "16px" }}
+          >
+            <div className="absolute -top-10 -right-10 w-24 h-24 bg-violet-500/30 blur-2xl rounded-full pointer-events-none" />
+            <div className="flex justify-between items-end relative z-10">
+              <div>
+                <div className="text-[10px] text-zinc-400 font-medium mb-1 tracking-wide uppercase">Total Balance</div>
+                <div className="text-2xl font-bold text-white tracking-tight">$124,592.50</div>
+              </div>
+              <div className="flex flex-col items-end gap-1">
+                <div className="rounded bg-emerald-500/20 text-emerald-400 text-[10px] font-bold border border-emerald-500/20" style={{ padding: "2px 8px" }}>
+                  +12.5%
+                </div>
+                <div className="text-[9px] text-zinc-500 font-medium">Past 30 days</div>
+              </div>
+            </div>
+          </motion.div>
 
           {/* Cards */}
-          <div className="grid grid-cols-3 gap-3 mt-4">
-
-            {[1, 2, 3].map((i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{
-                  opacity: 1,
-                  y: 0
-                }}
-                transition={{
-                  delay: 2.5 + i * 0.2,
-                  duration: 0.6,
-                  repeat: Infinity,
-                  repeatDelay: 4
-                }}
-                className="h-20 rounded-xl bg-white/5 border border-white/10"
-              />
-            ))}
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { t: "AAPL", p: "+2.4%", c: "text-emerald-400", v: "152.30" },
+              { t: "TSLA", p: "-1.2%", c: "text-red-400", v: "185.10" },
+              { t: "NVDA", p: "+5.8%", c: "text-emerald-400", v: "890.20" }
+            ].map((stock, i) => {
+              const start = 0.27 + i * 0.02;
+              return (
+                <motion.div
+                  key={i}
+                  animate={{ y: [15, 15, 0, 0, 15], opacity: [0, 0, 1, 1, 0] }}
+                  transition={{ duration: 8, repeat: Infinity, times: [0, start, start + 0.1, 0.9, 1] }}
+                  className="rounded-xl bg-[#111] border border-white/5 flex flex-col justify-between shadow-md"
+                  style={{ padding: "12px" }}
+                >
+                  <div className="flex justify-between items-center mb-2">
+                    <div className="text-[10px] font-semibold text-zinc-300">{stock.t}</div>
+                    <div className={`text-[9px] font-bold ${stock.c}`}>{stock.p}</div>
+                  </div>
+                  <div className="text-xs font-mono text-white">${stock.v}</div>
+                </motion.div>
+              );
+            })}
           </div>
 
-          {/* Analytics */}
+          {/* Analytics Container */}
           <motion.div
-            initial={{ scaleY: 0 }}
-            animate={{ scaleY: 1 }}
-            transition={{
-              delay: 3.5,
-              duration: 1,
-              repeat: Infinity,
-              repeatDelay: 4
-            }}
-            className="mt-5 h-28 rounded-xl bg-white/5 border border-white/10 flex items-end gap-3 p-4"
+            animate={{ y: [15, 15, 0, 0, 15], opacity: [0, 0, 1, 1, 0] }}
+            transition={{ duration: 8, repeat: Infinity, times: [0, 0.32, 0.42, 0.9, 1] }}
+            className="h-24 rounded-xl bg-[#111] border border-white/5 flex flex-col relative overflow-hidden shadow-md"
+            style={{ padding: "12px" }}
           >
-            {[40, 70, 90, 55, 80].map((h, i) => (
-              <div
-                key={i}
-                className="flex-1 rounded-md bg-violet-500"
-                style={{ height: `${h}%` }}
-              />
-            ))}
+            <div className="flex justify-between items-center mb-2 z-10">
+              <div className="text-[9px] font-semibold text-zinc-400 uppercase tracking-wider">Volume</div>
+              <div className="flex items-center gap-1">
+                <div className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />
+                <div className="text-[9px] text-violet-400 font-medium">Live</div>
+              </div>
+            </div>
+            <div className="absolute bottom-0 left-3 right-3 h-12 flex items-end gap-[4px]">
+              {[40, 70, 45, 90, 55, 80, 65, 100, 75, 40].map((h, i) => {
+                const start = 0.35 + i * 0.015;
+                return (
+                  <motion.div
+                    key={i}
+                    animate={{ height: ["0%", "0%", `${h}%`, `${h}%`, "0%"] }}
+                    transition={{
+                      duration: 8,
+                      repeat: Infinity,
+                      times: [0, start, start + 0.08, 0.9, 1]
+                    }}
+                    className="flex-1 rounded-t-[2px] bg-gradient-to-t from-violet-600/60 to-violet-400"
+                  />
+                );
+              })}
+            </div>
           </motion.div>
         </motion.div>
 
         {/* Deploy Badge */}
         <motion.div
-          animate={{
-            opacity: [0, 0, 0, 1, 1]
-          }}
-          transition={{
-            duration: 8,
-            repeat: Infinity
-          }}
-          className="absolute bottom-5 right-5"
+          animate={{ opacity: [0, 0, 0, 1, 1, 0], scale: [0.9, 0.9, 0.9, 1, 1, 0.9] }}
+          transition={{ duration: 8, repeat: Infinity, times: [0, 0.55, 0.58, 0.62, 0.9, 1] }}
+          className="absolute bottom-5 right-5 z-20"
         >
-          <div className="rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-2">
-            <div className="text-green-400 text-xs">
-              ✓ Live on zorviq.app
+          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 backdrop-blur-md shadow-lg shadow-emerald-500/10">
+            <div className="text-emerald-400 text-xs font-medium flex items-center gap-2">
+              <span className="text-emerald-300">✓</span> Live on zorviq.app
             </div>
           </div>
         </motion.div>
       </motion.div>
 
-      {/* Floating AI Orb */}
-      <motion.div
-        animate={{
-          y: [-10, 10, -10],
-          rotate: [0, 180, 360]
-        }}
-        transition={{
-          duration: 10,
-          repeat: Infinity
-        }}
-        className="absolute right-6 top-10"
-      >
-        <div className="w-14 h-14 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 blur-[1px]" />
-      </motion.div>
+
     </div>
   );
 }
 
 function AICopyDemo() {
   return (
-    <div className="relative h-full w-full overflow-hidden rounded-3xl bg-[#070707] border border-white/10 flex flex-col p-6">
+    <div className="relative h-full w-full overflow-hidden rounded-3xl bg-[#070707] border border-white/10 flex flex-col p-6" style={{ padding: "24px" }}>
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(109,40,217,0.15),transparent_70%)]" />
       <div className="flex items-center gap-3 mb-6 relative z-10">
         <div className="w-2 h-2 rounded-full bg-violet-500 animate-pulse" />
         <div className="text-xs text-white/40 font-mono">meridian-copy.md (Optimizing)</div>
       </div>
-      <div className="relative z-10 p-5 rounded-xl border border-violet-500/30 bg-violet-500/10 mb-4">
-        <div className="absolute -top-3 right-4 bg-violet-500 text-white text-[10px] font-bold px-2 py-1 rounded">
+      <div className="relative z-10 p-5 rounded-xl border border-violet-500/30 bg-violet-500/10 mb-4" style={{ padding: "20px" }}>
+        <div className="absolute -top-3 right-4 bg-violet-500 text-white text-[10px] font-bold px-2 py-1 rounded" style={{ padding: "4px 8px" }}>
           98% Match
         </div>
         <div className="text-[10px] text-violet-400 mb-2 font-mono uppercase tracking-wider">Hero Headline</div>
@@ -224,6 +203,7 @@ function AICopyDemo() {
             animate={{ opacity: [0, 1, 1, 0], y: [10, 0, 0, -10] }}
             transition={{ delay: i * 2, duration: 4, repeat: Infinity }}
             className="p-3 rounded-lg border border-white/5 bg-white/5"
+            style={{ padding: "12px" }}
           >
             <div className="text-[10px] text-white/40 mb-2 font-mono uppercase">Generating Variant {i}</div>
             <div className="space-y-2">
@@ -240,7 +220,7 @@ function AICopyDemo() {
 
 function DesignSystemDemo() {
   return (
-    <div className="relative h-full w-full overflow-hidden rounded-3xl bg-[#070707] border border-white/10 flex flex-col p-6">
+    <div className="relative h-full w-full overflow-hidden rounded-3xl bg-[#070707] border border-white/10 flex flex-col p-6" style={{ padding: "24px" }}>
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,rgba(59,130,246,0.15),transparent_70%)]" />
       <div className="flex items-center justify-between mb-6 relative z-10">
         <div className="text-xs text-white/40 font-mono">tokens.json</div>
@@ -275,6 +255,7 @@ function DesignSystemDemo() {
             animate={{ x: 0, opacity: 1 }}
             transition={{ delay: i * 0.5, duration: 1, repeat: Infinity, repeatDelay: 3 }}
             className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/5"
+            style={{ padding: "12px" }}
           >
             <div className={`${t.size} text-white/80 font-bold`}>{t.font}</div>
             <div className="text-[10px] text-white/30 uppercase">{t.label}</div>
@@ -287,9 +268,9 @@ function DesignSystemDemo() {
 
 function DeployDemo() {
   return (
-    <div className="relative h-full w-full overflow-hidden rounded-3xl bg-[#070707] border border-white/10 flex flex-col p-6">
+    <div className="relative h-full w-full overflow-hidden rounded-3xl bg-[#070707] border border-white/10 flex flex-col p-6" style={{ padding: "24px" }}>
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(16,185,129,0.1),transparent_70%)]" />
-      <div className="flex-1 rounded-xl bg-black border border-white/10 p-4 font-mono text-xs overflow-hidden relative z-10">
+      <div className="flex-1 rounded-xl bg-black border border-white/10 p-4 font-mono text-xs overflow-hidden relative z-10" style={{ padding: "16px" }}>
         <div className="flex gap-2 mb-4">
           <div className="w-2 h-2 rounded-full bg-red-500" />
           <div className="w-2 h-2 rounded-full bg-yellow-500" />
@@ -318,6 +299,7 @@ function DeployDemo() {
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 4, duration: 0.5, repeat: Infinity, repeatDelay: 5 }}
             className="mt-6 p-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 flex items-center gap-2"
+            style={{ padding: "12px" }}
           >
             <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             zorviq.app/live
@@ -330,30 +312,31 @@ function DeployDemo() {
 
 function FigmaDemo() {
   return (
-    <div className="relative h-full w-full overflow-hidden rounded-3xl bg-[#070707] border border-white/10 p-6 flex flex-col">
+    <div className="relative h-full w-full overflow-hidden rounded-3xl bg-[#070707] border border-white/10 p-6 flex flex-col" style={{ padding: "24px" }}>
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_left,rgba(242,78,30,0.15),transparent_70%)]" />
       <div className="flex items-center gap-4 mb-4 relative z-10">
-        <div className="px-3 py-1 rounded-md bg-white/5 text-[10px] text-white/50 font-mono">figma.com/file/...</div>
+        <div className="px-3 py-1 rounded-md bg-white/5 text-[10px] text-white/50 font-mono" style={{ padding: "4px 12px" }}>figma.com/file/...</div>
         <motion.div 
           animate={{ x: [0, 10, 0] }} 
           transition={{ duration: 1.5, repeat: Infinity }}
           className="text-white/30"
         >→</motion.div>
-        <div className="px-3 py-1 rounded-md bg-violet-500/20 text-[10px] text-violet-400 font-mono">Code Generated</div>
+        <div className="px-3 py-1 rounded-md bg-violet-500/20 text-[10px] text-violet-400 font-mono" style={{ padding: "4px 12px" }}>Code Generated</div>
       </div>
       <div className="flex-1 grid grid-cols-2 gap-4 relative z-10">
-        <div className="rounded-xl border border-white/10 bg-[#1E1E1E] p-4 flex flex-col justify-center items-center relative overflow-hidden">
+        <div className="rounded-xl border border-white/10 bg-[#1E1E1E] p-4 flex flex-col justify-center items-center relative overflow-hidden" style={{ padding: "16px" }}>
           <motion.div 
             animate={{ scale: [1, 1.05, 1] }}
             transition={{ duration: 4, repeat: Infinity }}
             className="w-32 h-24 border border-[#0fA958] bg-[#0fA958]/10 rounded flex flex-col items-center justify-center relative p-2"
+            style={{ padding: "8px" }}
           >
-            <div className="absolute top-0 left-0 bg-[#0fA958] text-white text-[8px] px-1">Frame</div>
+            <div className="absolute top-0 left-0 bg-[#0fA958] text-white text-[8px] px-1" style={{ padding: "0 4px" }}>Frame</div>
             <div className="w-20 h-4 bg-white/20 rounded-sm mb-2" />
             <div className="w-24 h-2 bg-white/10 rounded-sm" />
           </motion.div>
         </div>
-        <div className="rounded-xl border border-violet-500/20 bg-black p-4 font-mono text-[8px] sm:text-[10px] text-white/40 leading-relaxed overflow-hidden">
+        <div className="rounded-xl border border-violet-500/20 bg-black p-4 font-mono text-[8px] sm:text-[10px] text-white/40 leading-relaxed overflow-hidden" style={{ padding: "16px" }}>
           <motion.div
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
@@ -375,7 +358,7 @@ function FigmaDemo() {
 
 function AnimationDemo() {
   return (
-    <div className="relative h-full w-full overflow-hidden rounded-3xl bg-[#070707] border border-white/10 p-6 flex flex-col">
+    <div className="relative h-full w-full overflow-hidden rounded-3xl bg-[#070707] border border-white/10 p-6 flex flex-col" style={{ padding: "24px" }}>
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom,rgba(167,139,250,0.15),transparent_70%)]" />
       <div className="flex items-center justify-between mb-6 relative z-10">
         <div className="text-xs text-white/40 font-mono">Motion Timeline</div>
