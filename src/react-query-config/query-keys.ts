@@ -6,4 +6,7 @@ export const queryKeys = {
     list: () => ["projects", "list"] as const,
     detail: (id: string) => ["projects", "detail", id] as const,
   },
+  github: {
+    status: () => ["github", "status"] as const,
+  },
 };

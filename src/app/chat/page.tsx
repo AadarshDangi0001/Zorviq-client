@@ -3,9 +3,11 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Check, Copy } from "lucide-react";
-import { authStore } from "@/lib/api";
+import { authStore, API_BASE_URL } from "@/lib/api";
 import { useUpdateProject } from "@/react-query-config/mutations/use-project-mutations";
 import { useProject } from "@/react-query-config/queries/use-project-queries";
+import { useGitHubStatus } from "@/react-query-config/queries/use-github-queries";
+import { useDeployProject } from "@/react-query-config/mutations/use-github-mutations";
 import { generationService } from "@/services/generation.service";
 import Loader from "@/components/Loader";
 
@@ -40,6 +42,14 @@ const defaultCode = `<!doctype html>
   </body>
 </html>`;
 
+const toSafeFileName = (name: string): string => {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "zorviq-project";
+};
+
 export default function ChatPage() {
   return (
     <Suspense
@@ -71,6 +81,73 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
     isLoading: isProjectLoading,
   } = useProject(queryProjectId);
   const updateProject = useUpdateProject();
+
+  const searchParams = useSearchParams();
+  const { data: githubStatus } = useGitHubStatus();
+  const deployProject = useDeployProject();
+
+  const [showDeployModal, setShowDeployModal] = useState(false);
+  const [deployProgress, setDeployProgress] = useState<string | null>(null);
+  const [deployError, setDeployError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (searchParams.get("github") === "connected") {
+      setShowDeployModal(true);
+      const newParams = new URLSearchParams(window.location.search);
+      newParams.delete("github");
+      const newSearch = newParams.toString();
+      router.replace(`/chat${newSearch ? `?${newSearch}` : ""}`);
+    }
+  }, [searchParams, router]);
+
+  const handleStartDeployment = async () => {
+    if (!projectId) return;
+    setDeployProgress("Creating GitHub Repository...");
+    setDeployError(null);
+
+    // Pre-open blank tab synchronously during click event to bypass browser popup blockers
+    const newTab = window.open("", "_blank");
+    if (newTab) {
+      newTab.document.title = "Deploying to Vercel...";
+      newTab.document.body.innerHTML = `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; display: grid; place-items: center; min-height: 100vh; background: #060608; color: #a1a1aa; margin: 0; padding: 24px; box-sizing: border-box; text-align: center;">
+          <div>
+            <div style="width: 24px; height: 24px; border: 2px solid #a78bfa; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px;"></div>
+            <h2 style="color: #fff; margin: 0 0 8px 0; font-size: 20px; font-weight: 700;">Deploying your Zorviq Project...</h2>
+            <p style="margin: 0 0 4px 0; font-size: 14px;">We are creating your GitHub repository and uploading your files.</p>
+            <p style="margin: 0; font-size: 14px;">Please wait, you will be redirected to Vercel shortly.</p>
+          </div>
+          <style>
+            @keyframes spin { to { transform: rotate(360deg); } }
+          </style>
+        </div>
+      `;
+    }
+
+    try {
+      const result = await deployProject.mutateAsync({ projectId, isPrivate: false });
+      
+      setDeployProgress("Pushing files to GitHub...");
+      setDeployProgress("Redirecting to Vercel...");
+      
+      const vercelUrl = `https://vercel.com/new/clone?repository-url=${encodeURIComponent(result.repositoryUrl)}`;
+      
+      if (newTab) {
+        newTab.location.href = vercelUrl;
+      } else {
+        window.open(vercelUrl, "_blank");
+      }
+      
+      setDeployProgress(null);
+      setShowDeployModal(false);
+    } catch (err: any) {
+      if (newTab) {
+        newTab.close();
+      }
+      setDeployProgress(null);
+      setDeployError(err?.message || "Failed to deploy project. Please try again.");
+    }
+  };
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -761,6 +838,20 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
           </div>
 
           <div className="chat-header-right">
+            <button 
+              className="header-btn deploy-btn" 
+              onClick={() => setShowDeployModal(true)}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 76 65" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M37.5273 0L75.0546 65H0L37.5273 0Z" fill="currentColor"/>
+              </svg>
+              Deploy to Vercel
+            </button>
             <button className="header-btn publish" onClick={downloadCode}>Download HTML</button>
           </div>
         </header>
@@ -869,6 +960,110 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
                   Generate Changes
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {showDeployModal && (
+          <div className="section-prompt-backdrop" onClick={() => !deployProgress && setShowDeployModal(false)}>
+            <div className="section-prompt-card deploy-card" onClick={(e) => e.stopPropagation()}>
+              <div className="card-header">
+                <h3 style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <svg width="16" height="16" viewBox="0 0 76 65" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M37.5273 0L75.0546 65H0L37.5273 0Z" fill="currentColor"/>
+                  </svg>
+                  Deploy to Vercel
+                </h3>
+                {!deployProgress && (
+                  <button className="close-btn" onClick={() => setShowDeployModal(false)}>
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {!githubStatus?.githubConnected ? (
+                <div className="deploy-step">
+                  <p className="card-desc" style={{ marginBottom: "16px" }}>
+                    To deploy your website in one click, you need to connect your GitHub account. Zorviq will create a public repository and upload your files.
+                  </p>
+                  <div className="card-actions">
+                    <button className="cancel-btn" onClick={() => setShowDeployModal(false)}>
+                      Cancel
+                    </button>
+                    <a
+                      className="primary-btn connect-gh-btn"
+                      href={`${API_BASE_URL}/api/github/connect?returnTo=${encodeURIComponent(`/chat?id=${projectId}`)}`}
+                      style={{
+                        padding: "8px 16px",
+                        fontSize: "13px",
+                        fontWeight: 800,
+                        textDecoration: "none",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        background: "#7C3AED",
+                        color: "#fff",
+                        borderRadius: "8px"
+                      }}
+                    >
+                      Connect GitHub
+                    </a>
+                  </div>
+                </div>
+              ) : (
+                <div className="deploy-step">
+                  {deployProgress ? (
+                    <div className="deploy-progress-container" style={{ textAlign: "center", padding: "24px 0" }}>
+                      <div className="deploy-spinner" style={{ marginBottom: "16px", display: "flex", justifyContent: "center" }}>
+                        <Loader />
+                      </div>
+                      <p className="deploy-status-text" style={{ fontSize: "14px", color: "#a1a1aa" }}>{deployProgress}</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="github-profile-badge" style={{ display: "flex", alignItems: "center", gap: "10px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", padding: "10px 12px", marginBottom: "16px" }}>
+                        {githubStatus.githubAvatar && (
+                          <img
+                            src={githubStatus.githubAvatar}
+                            alt={githubStatus.githubUsername}
+                            style={{ width: "24px", height: "24px", borderRadius: "50%" }}
+                          />
+                        )}
+                        <span className="github-username" style={{ fontSize: "13px", color: "#f4f4f5" }}>Connected as <strong>@{githubStatus.githubUsername}</strong></span>
+                      </div>
+
+                      <p className="card-desc" style={{ marginBottom: "16px", lineHeight: "1.6" }}>
+                        Zorviq will create a <strong>public</strong> GitHub repository named <code>{project?.name ? toSafeFileName(project.name) : "zorviq-project"}</code>, upload your code, and direct you to Vercel to clone and deploy it instantly.
+                      </p>
+
+                      {deployError && (
+                        <p className="error-text" style={{ marginBottom: "16px", color: "#ef4444", fontSize: "13px" }}>
+                          {deployError}
+                        </p>
+                      )}
+
+                      <div className="card-actions">
+                        <button className="cancel-btn" onClick={() => setShowDeployModal(false)}>
+                          Cancel
+                        </button>
+                        <button
+                          className="primary-btn"
+                          onClick={handleStartDeployment}
+                          style={{
+                            padding: "8px 16px",
+                            fontSize: "13px",
+                            fontWeight: 800,
+                            background: "#7C3AED",
+                            color: "#fff"
+                          }}
+                        >
+                          Deploy Now
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1005,6 +1200,22 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
         .preview-panel { flex: 1; display: flex; flex-direction: column; background: #0A0A0E; overflow: hidden; }
         .header-btn.active { background: rgba(124,58,237,0.24); border-color: rgba(167,139,250,0.48); color: #F5F3FF; }
         .header-btn.publish { background: #7C3AED; border-color: rgba(255,255,255,0.14); color: #fff; font-weight: 800; }
+        .header-btn.deploy-btn {
+          background: linear-gradient(135deg, #000 0%, #1c1917 100%) !important;
+          border: 1px solid rgba(255, 255, 255, 0.15) !important;
+          color: #fff !important;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+          transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+        }
+        .header-btn.deploy-btn:hover {
+          background: linear-gradient(135deg, #18181b 0%, #27272a 100%) !important;
+          border-color: rgba(255, 255, 255, 0.3) !important;
+          box-shadow: 0 4px 20px rgba(124, 58, 237, 0.22);
+        }
+        .deploy-card {
+          border-color: rgba(167, 139, 250, 0.3) !important;
+          box-shadow: 0 24px 64px rgba(124, 58, 237, 0.12), 0 24px 64px rgba(0, 0, 0, 0.7) !important;
+        }
         .preview-content {
           flex: 1;
           padding: 20px 24px;
