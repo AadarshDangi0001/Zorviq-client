@@ -852,7 +852,7 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
               </svg>
               Deploy to Vercel
             </button>
-            <button className="header-btn publish" onClick={downloadCode}>Download HTML</button>
+            <button className="header-btn publish" onClick={downloadCode}>Download Code</button>
           </div>
         </header>
         <div className="preview-content">
