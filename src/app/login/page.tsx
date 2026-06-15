@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { API_BASE_URL } from "@/lib/api";
 import { useLogin } from "@/react-query-config/mutations/use-auth-mutations";
 import { Button } from "@/shared/components/button";
@@ -13,6 +13,16 @@ export default function LoginPage() {
   const login = useLogin();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [urlError, setUrlError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const err = new URLSearchParams(window.location.search).get("error");
+      if (err) {
+        setUrlError(decodeURIComponent(err));
+      }
+    }
+  }, []);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -48,7 +58,7 @@ export default function LoginPage() {
         />
 
         <ErrorMessage
-          message={login.error instanceof Error ? login.error.message : undefined}
+          message={login.error instanceof Error ? login.error.message : (urlError || undefined)}
         />
 
         <Button
