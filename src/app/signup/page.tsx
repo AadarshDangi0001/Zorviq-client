@@ -51,7 +51,7 @@ export default function SignUpPage() {
           value={contact}
           onChange={(event) => setContact(event.target.value)}
           placeholder="Optional 10 digit mobile number"
-          pattern="\\d{10}"
+          pattern="[0-9]{10}"
         />
         <Input
           label="Email"

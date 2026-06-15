@@ -1,4 +1,4 @@
-const TOKEN_KEY = "zorviq_token";
+const TOKEN_KEY = "token";
 const USER_KEY = "zorviq_user";
 
 export type StoredUser = {

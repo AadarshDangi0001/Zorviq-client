@@ -3,7 +3,9 @@ import { authToken } from "./auth-token";
 import { ApiError, getApiErrorMessage } from "./errors";
 
 export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "http://localhost:3000";
+  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ??
+  process.env.API_BASE_URL?.replace(/\/$/, "") ??
+  "http://localhost:3000";
 
 type ApiEnvelope<T> = {
   success?: boolean;

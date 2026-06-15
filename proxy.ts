@@ -7,7 +7,7 @@ const hasSessionCookie = (request: NextRequest) =>
   Boolean(
     request.cookies.get("access_token")?.value ||
       request.cookies.get("refresh_token")?.value ||
-      request.cookies.get("zorviq_token")?.value,
+      request.cookies.get("token")?.value,
   );
 
 export function proxy(request: NextRequest) {
