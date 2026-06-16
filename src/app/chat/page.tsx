@@ -244,13 +244,42 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
         let inspectActive = false;
         let inspectHoveredEl = null;
 
+        // Create overlay element
+        let overlay = document.getElementById('zorviq-inspect-overlay');
+        if (!overlay) {
+          overlay = document.createElement('div');
+          overlay.id = 'zorviq-inspect-overlay';
+          overlay.style.position = 'absolute';
+          overlay.style.pointerEvents = 'none';
+          overlay.style.border = '2px solid #8B5CF6';
+          overlay.style.zIndex = '999999';
+          overlay.style.display = 'none';
+          overlay.style.boxSizing = 'border-box';
+          overlay.style.transition = 'all 0.05s ease-out';
+          
+          const label = document.createElement('div');
+          label.id = 'zorviq-inspect-label';
+          label.style.position = 'absolute';
+          label.style.top = '-20px';
+          label.style.left = '-2px';
+          label.style.background = '#8B5CF6';
+          label.style.color = '#fff';
+          label.style.fontSize = '10px';
+          label.style.fontFamily = 'Inter, system-ui, sans-serif';
+          label.style.fontWeight = 'bold';
+          label.style.padding = '2px 6px';
+          label.style.borderRadius = '3px 3px 0 0';
+          label.style.whiteSpace = 'nowrap';
+          overlay.appendChild(label);
+          
+          document.body.appendChild(overlay);
+        }
+
         window.addEventListener('message', (e) => {
           if (e.data?.type === 'SET_INSPECT_ACTIVE') {
             inspectActive = e.data.active;
-            if (!inspectActive && inspectHoveredEl) {
-              inspectHoveredEl.style.outline = "";
-              inspectHoveredEl.style.outlineOffset = "";
-              inspectHoveredEl.style.cursor = "";
+            if (!inspectActive) {
+              overlay.style.display = 'none';
               inspectHoveredEl = null;
             }
           }
@@ -258,49 +287,106 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
 
         document.addEventListener('mouseover', (e) => {
           if (inspectActive) {
-            const section = e.target.closest("[data-section-id]");
-            if (section) {
-              if (inspectHoveredEl && inspectHoveredEl !== section) {
-                inspectHoveredEl.style.outline = "";
-                inspectHoveredEl.style.outlineOffset = "";
-                inspectHoveredEl.style.cursor = "";
+            const target = e.target;
+            if (
+              target.tagName === 'BODY' || 
+              target.tagName === 'HTML' || 
+              target.id === 'zorviq-inspect-overlay' || 
+              target.closest('#zorviq-inspect-overlay')
+            ) return;
+            
+            inspectHoveredEl = target;
+            const rect = target.getBoundingClientRect();
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+            
+            overlay.style.top = (rect.top + scrollTop) + 'px';
+            overlay.style.left = (rect.left + scrollLeft) + 'px';
+            overlay.style.width = rect.width + 'px';
+            overlay.style.height = rect.height + 'px';
+            overlay.style.display = 'block';
+            
+            // Generate user-friendly element name
+            const tag = target.tagName.toLowerCase();
+            let name = tag;
+            if (['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(tag)) name = 'Heading (' + tag + ')';
+            else if (tag === 'p') name = 'Paragraph';
+            else if (tag === 'div') name = 'Container (div)';
+            else if (tag === 'a') name = 'Link (a)';
+            else if (tag === 'button') name = 'Button';
+            else if (tag === 'img') name = 'Image';
+            else if (tag === 'section') name = 'Section';
+            
+            const classList = Array.from(target.classList).slice(0, 2).join('.');
+            const labelText = name + (classList ? ' .' + classList : '');
+            
+            const label = document.getElementById('zorviq-inspect-label');
+            if (label) {
+              label.textContent = labelText;
+              if (rect.top < 24) {
+                label.style.top = '0px';
+                label.style.borderRadius = '0 0 3px 0';
+              } else {
+                label.style.top = '-20px';
+                label.style.borderRadius = '3px 3px 0 0';
               }
-              inspectHoveredEl = section;
-              section.style.outline = "2px dashed #A78BFA";
-              section.style.outlineOffset = "-2px";
-              section.style.cursor = "pointer";
             }
           }
         }, true);
 
         document.addEventListener('mouseout', (e) => {
           if (inspectActive) {
-            const section = e.target.closest("[data-section-id]");
-            if (section && section === inspectHoveredEl) {
-              section.style.outline = "";
-              section.style.outlineOffset = "";
-              section.style.cursor = "";
+            const target = e.target;
+            if (target === inspectHoveredEl) {
+              overlay.style.display = 'none';
               inspectHoveredEl = null;
             }
           }
         }, true);
 
+        window.addEventListener('scroll', () => {
+          if (inspectActive && inspectHoveredEl) {
+            const rect = inspectHoveredEl.getBoundingClientRect();
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+            overlay.style.top = (rect.top + scrollTop) + 'px';
+            overlay.style.left = (rect.left + scrollLeft) + 'px';
+          }
+        });
+
         document.addEventListener('click', (e) => {
           if (inspectActive) {
             e.preventDefault();
             e.stopPropagation();
-            const section = e.target.closest("[data-section-id]");
-            if (section) {
-              section.style.outline = "";
-              section.style.outlineOffset = "";
-              section.style.cursor = "";
+            const target = inspectHoveredEl || e.target;
+            if (target && target.tagName !== 'BODY' && target.tagName !== 'HTML') {
+              overlay.style.display = 'none';
               inspectHoveredEl = null;
+              
+              const getDomPath = (el) => {
+                const path = [];
+                let current = el;
+                while (current && current.parentNode && current.tagName !== 'BODY') {
+                  const parent = current.parentNode;
+                  const siblings = Array.from(parent.children).filter(
+                    child => child.tagName !== 'SCRIPT' && child.tagName !== 'STYLE' && child.id !== 'zorviq-inspect-overlay'
+                  );
+                  const index = siblings.indexOf(current);
+                  if (index === -1) return null;
+                  path.unshift(index);
+                  current = parent;
+                }
+                return path;
+              };
+              
               const payload = {
                 type: "SECTION_SELECTED",
-                id: section.getAttribute("data-section-id"),
-                html: section.outerHTML,
-                tagName: section.tagName.toLowerCase()
+                id: target.getAttribute("data-section-id") || null,
+                html: target.outerHTML,
+                tagName: target.tagName.toLowerCase(),
+                domPath: getDomPath(target)
               };
+              
               if (typeof window.zorviqSelectSection === "function") {
                 window.zorviqSelectSection(payload);
               } else {
@@ -380,17 +466,100 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
   const [sectionPrompt, setSectionPrompt] = useState("");
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
+  const activeCodeRef = useRef(activeCode);
+  useEffect(() => {
+    activeCodeRef.current = activeCode;
+  }, [activeCode]);
+
+  const handleSelectElement = async (data: {
+    id: string | null;
+    html: string;
+    tagName: string;
+    domPath?: number[] | null;
+  }) => {
+    if (data.id) {
+      setSelectedSection({
+        id: data.id,
+        html: data.html,
+        tagName: data.tagName,
+      });
+      setInspectActive(false);
+      return;
+    }
+
+    if (!data.domPath || data.domPath.length === 0) return;
+
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(activeCodeRef.current, "text/html");
+
+      let current: any = doc.body;
+      for (const index of data.domPath) {
+        if (current) {
+          const siblings = Array.from(current.children).filter(
+            (child: any) => child.tagName !== 'SCRIPT' && child.tagName !== 'STYLE'
+          );
+          current = siblings[index] || null;
+        }
+      }
+
+      if (current && current.nodeType === 1) {
+        const tag = current.tagName.toLowerCase();
+        let prefix = "el";
+        if (["h1", "h2", "h3", "h4", "h5", "h6"].includes(tag)) prefix = "heading";
+        else if (tag === "p" || tag === "span" || tag === "li") prefix = "text";
+        else if (tag === "button") prefix = "btn";
+        else if (tag === "a") prefix = "link";
+        else if (tag === "img") prefix = "img";
+        else if (["section", "header", "footer", "nav", "main"].includes(tag)) prefix = tag;
+        
+        const randomSuffix = Math.random().toString(36).substring(2, 8);
+        const newId = `${prefix}-${randomSuffix}`;
+        
+        current.setAttribute("data-section-id", newId);
+
+        let updatedCode = "";
+        if (activeCodeRef.current.toLowerCase().includes("<html")) {
+          updatedCode = doc.documentElement.outerHTML;
+          if (activeCodeRef.current.trim().toLowerCase().startsWith("<!doctype")) {
+            updatedCode = "<!DOCTYPE html>\n" + updatedCode;
+          }
+        } else {
+          updatedCode = doc.body.innerHTML;
+        }
+
+        setGeneratedCode(updatedCode);
+        if (projectId) {
+          await updateProject.mutateAsync({
+            id: projectId,
+            payload: { currentCode: updatedCode },
+          });
+        }
+
+        setSelectedSection({
+          id: newId,
+          html: current.outerHTML,
+          tagName: tag,
+        });
+        setInspectActive(false);
+      }
+    } catch (err) {
+      console.error("Failed to inject data-section-id:", err);
+      setError("Failed to select element. Please try again.");
+    }
+  };
+
+  const handleSelectElementRef = useRef(handleSelectElement);
+  useEffect(() => {
+    handleSelectElementRef.current = handleSelectElement;
+  });
+
   const handleIframeLoad = () => {
     const iframe = iframeRef.current;
     if (iframe && iframe.contentWindow) {
       try {
         (iframe.contentWindow as any).zorviqSelectSection = (data: any) => {
-          setSelectedSection({
-            id: data.id,
-            html: data.html,
-            tagName: data.tagName,
-          });
-          setInspectActive(false);
+          void handleSelectElementRef.current(data);
         };
       } catch (err) {
         console.warn("Could not set direct callback on iframe window", err);
@@ -403,12 +572,7 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
     const handleMessage = (e: MessageEvent) => {
       const data = e.data;
       if (data && data.type === "SECTION_SELECTED") {
-        setSelectedSection({
-          id: data.id,
-          html: data.html,
-          tagName: data.tagName,
-        });
-        setInspectActive(false);
+        void handleSelectElementRef.current(data);
       }
     };
     window.addEventListener("message", handleMessage);
@@ -422,12 +586,7 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
     if (iframe && iframe.contentWindow) {
       try {
         (iframe.contentWindow as any).zorviqSelectSection = (data: any) => {
-          setSelectedSection({
-            id: data.id,
-            html: data.html,
-            tagName: data.tagName,
-          });
-          setInspectActive(false);
+          void handleSelectElementRef.current(data);
         };
       } catch (err) {
         console.warn("Could not set direct callback on iframe window in useEffect", err);
@@ -808,7 +967,7 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
                 }}
               >
                 <span className={`inspect-dot ${inspectActive ? "active" : ""}`} />
-                {inspectActive ? "Inspecting" : "Edit Section"}
+                {inspectActive ? "Inspecting" : "Edit Element"}
               </button>
             )}
           </div>
@@ -906,7 +1065,10 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
           <div className="section-prompt-backdrop">
             <div className="section-prompt-card">
               <div className="card-header">
-                <h3>Edit Section: <code className="section-badge">{selectedSection.id}</code></h3>
+                <h3>
+                  Edit {["section", "header", "footer", "nav", "main"].includes(selectedSection.tagName) ? "Section" : "Element"}:{" "}
+                  <code className="section-badge">{selectedSection.id}</code>
+                </h3>
                 <button 
                   className="close-btn" 
                   onClick={() => {
@@ -919,7 +1081,7 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
               </div>
               
               <p className="card-desc">
-                Describe the changes you want to apply specifically to this <code>&lt;{selectedSection.tagName}&gt;</code> section. Zorviq will modify only this part of the page.
+                Describe the changes you want to apply specifically to this <code>&lt;{selectedSection.tagName}&gt;</code> {["section", "header", "footer", "nav", "main"].includes(selectedSection.tagName) ? "section" : "element"}. Zorviq will modify only this part of the page.
               </p>
 
               <textarea
