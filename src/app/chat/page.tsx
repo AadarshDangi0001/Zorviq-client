@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, Undo2, Redo2 } from "lucide-react";
 import { authStore, API_BASE_URL } from "@/lib/api";
 import { useUpdateProject } from "@/react-query-config/mutations/use-project-mutations";
 import { useProject } from "@/react-query-config/queries/use-project-queries";
@@ -82,6 +82,9 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
   } = useProject(queryProjectId);
   const updateProject = useUpdateProject();
 
+  const projectId = project?._id;
+  const storedCode = project?.currentCode ?? "";
+
   const searchParams = useSearchParams();
   const { data: githubStatus } = useGitHubStatus();
   const deployProject = useDeployProject();
@@ -158,6 +161,58 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
   const [error, setError] = useState("");
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
+  // Undo/Redo code version history states
+  const [codeHistory, setCodeHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState<number>(-1);
+
+  // Initialize from storedCode if history is empty
+  useEffect(() => {
+    if (storedCode && codeHistory.length === 0) {
+      setCodeHistory([storedCode]);
+      setHistoryIndex(0);
+    }
+  }, [storedCode, codeHistory.length]);
+
+  const pushCodeToHistory = (newCode: string) => {
+    setCodeHistory((prev) => {
+      const nextHistory = prev.slice(0, historyIndex + 1);
+      const updated = [...nextHistory, newCode];
+      setHistoryIndex(updated.length - 1);
+      return updated;
+    });
+    setGeneratedCode(newCode);
+  };
+
+  const handleUndo = async () => {
+    if (historyIndex > 0) {
+      const prevIndex = historyIndex - 1;
+      const targetCode = codeHistory[prevIndex];
+      setHistoryIndex(prevIndex);
+      setGeneratedCode(targetCode);
+      if (projectId) {
+        await updateProject.mutateAsync({
+          id: projectId,
+          payload: { currentCode: targetCode },
+        });
+      }
+    }
+  };
+
+  const handleRedo = async () => {
+    if (historyIndex < codeHistory.length - 1) {
+      const nextIndex = historyIndex + 1;
+      const targetCode = codeHistory[nextIndex];
+      setHistoryIndex(nextIndex);
+      setGeneratedCode(targetCode);
+      if (projectId) {
+        await updateProject.mutateAsync({
+          id: projectId,
+          payload: { currentCode: targetCode },
+        });
+      }
+    }
+  };
+
   const [activeSectionEdit, setActiveSectionEdit] = useState<{
     sectionId: string;
     originalCode: string;
@@ -221,8 +276,6 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
     return currentCode.slice(0, startIndex) + newSectionHtml + currentCode.slice(endIndex);
   };
 
-  const projectId = project?._id;
-  const storedCode = project?.currentCode ?? "";
 
   const activeCode = useMemo(() => {
     if (activeSectionEdit && streamingSectionCode) {
@@ -528,7 +581,7 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
           updatedCode = doc.body.innerHTML;
         }
 
-        setGeneratedCode(updatedCode);
+        pushCodeToHistory(updatedCode);
         if (projectId) {
           await updateProject.mutateAsync({
             id: projectId,
@@ -631,16 +684,24 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [visibleMessages, isWorking]);
 
-  const finishGeneration = async (code: string, jobId: string) => {
+  const finishGeneration = async (code: string, jobId: string, tokenCountFromSse?: number | null) => {
     let finalCode = code;
+    let tokenCount = tokenCountFromSse;
 
     if (!finalCode.trim()) {
-      const status = await generationService.status(jobId);
-      finalCode = status.output ?? "";
+      try {
+        const status = await generationService.status(jobId);
+        finalCode = status.output ?? "";
+        if (status.tokenCount !== undefined) {
+          tokenCount = status.tokenCount;
+        }
+      } catch (err) {
+        console.error("Failed to fetch final generation status:", err);
+      }
     }
 
     if (finalCode.trim()) {
-      setGeneratedCode(finalCode);
+      pushCodeToHistory(finalCode);
       if (projectId) {
         await updateProject.mutateAsync({
           id: projectId,
@@ -652,6 +713,8 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
     activeSectionEditRef.current = null;
     setActiveSectionEdit(null);
     setStreamingSectionCode("");
+
+    console.log(`[Token Usage] Project generation complete. Job ID: ${jobId}, Tokens used: ${tokenCount !== undefined && tokenCount !== null ? tokenCount : 'unknown'}`);
 
     setMessages((prev) => [
       ...prev,
@@ -682,6 +745,7 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
         data?: string;
         code?: string;
         message?: string;
+        tokenCount?: number | null;
       };
 
       if (payload.type === "token" && payload.data) {
@@ -696,7 +760,7 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
 
       if (payload.type === "done") {
         source.close();
-        await finishGeneration(payload.code ?? output, jobId);
+        await finishGeneration(payload.code ?? output, jobId, payload.tokenCount);
       }
 
       if (payload.type === "error") {
@@ -716,7 +780,7 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
         setWorkingStatus("Checking generation status");
         const status = await generationService.status(jobId);
         if (status.status === "done") {
-          await finishGeneration(status.output ?? output, jobId);
+          await finishGeneration(status.output ?? output, jobId, status.tokenCount);
           return;
         }
         throw new Error("The generation stream disconnected before completion");
@@ -756,7 +820,7 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
     try {
       const result = await generationService.enqueue(projectId, backendPrompt, opts);
       if (result.status === "done" && result.code) {
-        await finishGeneration(result.code, result.jobId);
+        await finishGeneration(result.code, result.jobId, 0); // Cached responses use 0 new tokens
         return;
       }
 
@@ -811,7 +875,7 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
         }
       );
       if (result.status === "done" && result.code) {
-        await finishGeneration(result.code, result.jobId);
+        await finishGeneration(result.code, result.jobId, 0); // Cached responses use 0 new tokens
         return;
       }
 
@@ -852,8 +916,35 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
         if (Array.isArray(historyItems)) {
           const formattedMessages: Message[] = [];
 
+          // Calculate total tokens from history
+          let totalTokens = 0;
+          historyItems.forEach((item: any) => {
+            if (item.tokenCount) {
+              totalTokens += item.tokenCount;
+            }
+          });
+          console.log(`[Token Usage] Project history loaded. Total tokens used: ${totalTokens}`);
+
           // historyItems is sorted newest first in backend, reverse to show oldest first
-          [...historyItems].reverse().forEach((item: any) => {
+          const reversed = [...historyItems].reverse();
+          const codeVersions: string[] = [];
+
+          reversed.forEach((item: any) => {
+            if (item.status === 'done' && item.output) {
+              codeVersions.push(item.output);
+            }
+          });
+
+          if (storedCode && (codeVersions.length === 0 || codeVersions[codeVersions.length - 1] !== storedCode)) {
+            codeVersions.push(storedCode);
+          }
+
+          if (codeVersions.length > 0) {
+            setCodeHistory(codeVersions);
+            setHistoryIndex(codeVersions.length - 1);
+          }
+
+          reversed.forEach((item: any) => {
             const formattedTime = item.createdAt
               ? new Date(item.createdAt).toLocaleTimeString("en-US", {
                   hour: "2-digit",
@@ -934,10 +1025,11 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
     <div className="chat-root">
       <div className="chat-panel">
         <header className="chat-header">
-          <div className="chat-header-left">
+          <div className="chat-header-left" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span className="logo-badge" style={{ background: '#7C3AED', width: '24px', height: '24px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '900', fontSize: '13px', color: '#fff', boxShadow: '0 0 10px rgba(124,58,237,0.5)' }}>Z</span>
             <span className="chat-header-title">{project?.name ?? "Loading project..."}</span>
           </div>
-          <button className="back-btn" onClick={() => router.push("/dashboard")}>Dashboard</button>
+          <button className="back-btn" onClick={() => router.push("/dashboard")}>← Dashboard</button>
         </header>
 
         <div className="messages-area">
@@ -1002,9 +1094,76 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
 
       <div className="preview-panel">
         <header className="preview-header">
-          <div className="preview-tabs">
-            <button className={`header-btn ${viewMode === "preview" ? "active" : ""}`} onClick={() => setViewMode("preview")}>Watch Preview</button>
-            <button className={`header-btn ${viewMode === "code" ? "active" : ""}`} onClick={() => setViewMode("code")}>Watch Code</button>
+          {/* Left Column: Preview/Code Tabs + Symmetrical Undo/Redo */}
+          <div className="preview-header-left" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div className="preview-tabs" style={{ display: 'flex', gap: '4px' }}>
+              <button className={`header-btn ${viewMode === "preview" ? "active" : ""}`} onClick={() => setViewMode("preview")}>Preview</button>
+              <button className={`header-btn ${viewMode === "code" ? "active" : ""}`} onClick={() => setViewMode("code")}>Code</button>
+            </div>
+            
+            <div className="history-controls" style={{ display: 'flex', gap: '4px', borderLeft: '1px solid rgba(255,255,255,0.12)', paddingLeft: '10px', alignItems: 'center' }}>
+              <button 
+                className="header-btn"
+                onClick={handleUndo}
+                disabled={historyIndex <= 0 || isWorking}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  opacity: (historyIndex <= 0 || isWorking) ? 0.35 : 1,
+                  cursor: (historyIndex <= 0 || isWorking) ? 'not-allowed' : 'pointer',
+                  padding: '6px',
+                  minHeight: '32px',
+                  width: '32px'
+                }}
+                title="Undo last change"
+              >
+                <Undo2 size={15} />
+              </button>
+              <button 
+                className="header-btn"
+                onClick={handleRedo}
+                disabled={historyIndex >= codeHistory.length - 1 || isWorking}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  opacity: (historyIndex >= codeHistory.length - 1 || isWorking) ? 0.35 : 1,
+                  cursor: (historyIndex >= codeHistory.length - 1 || isWorking) ? 'not-allowed' : 'pointer',
+                  padding: '6px',
+                  minHeight: '32px',
+                  width: '32px'
+                }}
+                title="Redo next change"
+              >
+                <Redo2 size={15} />
+              </button>
+            </div>
+          </div>
+
+          {/* Center Column: Responsive Select Dropdown */}
+          <div className="preview-header-center" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+            <div className="responsive-selector-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span className="selector-label" style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Device:</span>
+              <select
+                className="responsive-select"
+                value={previewWidth === null ? "desktop" : previewWidth === 768 ? "tablet" : "mobile"}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === "desktop") setPreviewWidth(null);
+                  else if (val === "tablet") setPreviewWidth(768);
+                  else if (val === "mobile") setPreviewWidth(375);
+                }}
+              >
+                <option value="desktop">🖥️ Desktop</option>
+                <option value="tablet">📱 Tablet</option>
+                <option value="mobile">🤳 Mobile</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Right Column: Actions (Inspect/Edit, Deploy, Download) */}
+          <div className="preview-header-right" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             {viewMode === "preview" && (
               <button
                 className={`header-btn edit-mode-btn ${inspectActive ? "active" : ""}`}
@@ -1017,37 +1176,11 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
                   background: inspectActive ? "rgba(124, 58, 237, 0.2)" : "",
                 }}
               >
-                <span className={`inspect-dot ${inspectActive ? "active" : ""}`} />
+                <span className={`inspect-dot ${inspectActive ? "active" : ""}`} style={{ width: '6px', height: '6px', borderRadius: '50%', background: inspectActive ? '#A78BFA' : 'rgba(255,255,255,0.4)' }} />
                 {inspectActive ? "Inspecting" : "Edit Element"}
               </button>
             )}
-          </div>
-          
-          <div className="responsive-presets">
-            <button 
-              className={`preset-btn ${!previewWidth ? "active" : ""}`} 
-              onClick={() => setPreviewWidth(null)}
-              title="Full width (Desktop)"
-            >
-              Desktop
-            </button>
-            <button 
-              className={`preset-btn ${previewWidth === 768 ? "active" : ""}`} 
-              onClick={() => setPreviewWidth(768)}
-              title="Tablet width (768px)"
-            >
-              Tablet
-            </button>
-            <button 
-              className={`preset-btn ${previewWidth === 375 ? "active" : ""}`} 
-              onClick={() => setPreviewWidth(375)}
-              title="Mobile width (375px)"
-            >
-              Mobile
-            </button>
-          </div>
-
-          <div className="chat-header-right">
+            
             <button 
               className="header-btn deploy-btn" 
               onClick={() => setShowDeployModal(true)}
@@ -1060,9 +1193,9 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
               <svg width="12" height="12" viewBox="0 0 76 65" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M37.5273 0L75.0546 65H0L37.5273 0Z" fill="currentColor"/>
               </svg>
-              Deploy to Vercel
+              Deploy
             </button>
-            <button className="header-btn publish" onClick={downloadCode}>Download Code</button>
+            <button className="header-btn publish" onClick={downloadCode}>Download</button>
           </div>
         </header>
         <div className="preview-content">
@@ -1483,35 +1616,32 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
         .resize-handle.right {
           right: -16px;
         }
-        .responsive-presets {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          background: rgba(255, 255, 255, 0.04);
-          border: 1px solid rgba(255, 255, 255, 0.1);
+        .responsive-select {
+          min-height: 36px;
+          padding: 8px 32px 8px 12px;
           border-radius: 8px;
-          padding: 3px;
-        }
-        .preset-btn {
-          min-height: 28px;
-          padding: 4px 10px;
-          border-radius: 6px;
-          border: none;
-          background: transparent;
-          color: #9ca3af;
-          font-size: 12px;
+          border: 1px solid rgba(255,255,255,0.18);
+          background: rgba(255,255,255,0.06);
+          color: #f4f4f5;
+          font-size: 13px;
           font-weight: 700;
           cursor: pointer;
+          outline: none;
+          appearance: none;
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='rgba(255,255,255,0.6)' stroke-width='2.5'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19.5 8.25l-7.5 7.5-7.5-7.5'/%3E%3C/svg%3E");
+          background-repeat: no-repeat;
+          background-position: right 10px center;
+          background-size: 14px;
           transition: all 0.2s;
         }
-        .preset-btn:hover {
+        .responsive-select:hover {
+          background-color: rgba(124,58,237,0.14);
+          border-color: rgba(167,139,250,0.42);
           color: #fff;
-          background: rgba(255, 255, 255, 0.06);
         }
-        .preset-btn.active {
-          background: rgba(124, 58, 237, 0.24);
-          border: 1px solid rgba(167, 139, 250, 0.3);
-          color: #fff;
+        .responsive-select option {
+          background: #101014;
+          color: #f4f4f5;
         }
         .preview-frame { width: 100%; height: 100%; border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; background: #fff; box-shadow: 0 18px 60px rgba(0,0,0,0.28); }
         .code-shell { position: relative; width: 100%; height: 100%; min-height: 0; }

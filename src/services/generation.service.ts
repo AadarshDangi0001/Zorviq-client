@@ -12,7 +12,7 @@ export const generationService = {
     }>("/api/generate", { projectId, prompt, ...opts });
   },
   status(jobId: string) {
-    return apiClient.get<{ status: string; output?: string | null }>(
+    return apiClient.get<{ status: string; output?: string | null; tokenCount?: number | null }>(
       `/api/generate/status/${jobId}`,
     );
   },
