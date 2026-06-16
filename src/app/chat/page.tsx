@@ -75,6 +75,7 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
   const router = useRouter();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const streamRef = useRef<EventSource | null>(null);
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const {
     data: project,
     isError: isProjectError,
@@ -666,6 +667,9 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
   useEffect(() => {
     return () => {
       streamRef.current?.close();
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
     };
   }, []);
 
@@ -687,6 +691,11 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
   const finishGeneration = async (code: string, jobId: string, tokenCountFromSse?: number | null) => {
     let finalCode = code;
     let tokenCount = tokenCountFromSse;
+
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
 
     if (!finalCode.trim()) {
       try {
@@ -783,15 +792,59 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
           await finishGeneration(status.output ?? output, jobId, status.tokenCount);
           return;
         }
-        throw new Error("The generation stream disconnected before completion");
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Generation failed");
-        setIsWorking(false);
-        setWorkingStatus("");
-        activeSectionEditRef.current = null;
-        setActiveSectionEdit(null);
-        setStreamingSectionCode("");
+        console.warn("Initial status check on SSE disconnect failed:", err);
       }
+
+      // SSE disconnected but job is not done yet. Fallback to polling status:
+      setWorkingStatus("Connection unstable, polling status...");
+      
+      let pollCount = 0;
+      const maxPolls = 60; // poll for up to 120 seconds
+      
+      const pollInterval = setInterval(async () => {
+        try {
+          pollCount++;
+          const status = await generationService.status(jobId);
+          
+          if (status.status === "done") {
+            clearInterval(pollInterval);
+            pollIntervalRef.current = null;
+            await finishGeneration(status.output ?? output, jobId, status.tokenCount);
+            return;
+          }
+          
+          if (status.status === "failed") {
+            clearInterval(pollInterval);
+            pollIntervalRef.current = null;
+            setError("Generation failed. Please try again.");
+            setIsWorking(false);
+            setWorkingStatus("");
+            activeSectionEditRef.current = null;
+            setActiveSectionEdit(null);
+            setStreamingSectionCode("");
+            return;
+          }
+          
+          if (pollCount >= maxPolls) {
+            clearInterval(pollInterval);
+            pollIntervalRef.current = null;
+            setError("Generation timed out. Please try again.");
+            setIsWorking(false);
+            setWorkingStatus("");
+            activeSectionEditRef.current = null;
+            setActiveSectionEdit(null);
+            setStreamingSectionCode("");
+            return;
+          }
+          
+          setWorkingStatus(`Generating... (${pollCount * 2}s)`);
+        } catch (err) {
+          console.warn("Poll status check failed:", err);
+        }
+      }, 2000);
+      
+      pollIntervalRef.current = pollInterval;
     };
   };
 
@@ -987,6 +1040,10 @@ function ChatContent({ queryProjectId }: { queryProjectId: string | null }) {
 
   const stopGeneration = () => {
     streamRef.current?.close();
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
     setIsWorking(false);
     setWorkingStatus("");
   };
